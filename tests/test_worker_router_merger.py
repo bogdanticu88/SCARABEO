@@ -90,7 +90,7 @@ class TestReportMerger:
             "tenant_id": "test",
             "metadata": {"file_type": "pe"},
         }
-        report = merge_partial_outputs([], input_data, "triage", "hash")
+        report = merge_partial_outputs([], input_data, "triage", "b" * 64)
         assert report["sample_sha256"] == input_data["sample_sha256"]
         assert report["findings"] == []
         assert report["iocs"] == []
@@ -106,11 +106,22 @@ class TestReportMerger:
             "schema_version": "1.0.0",
             "analyzer_name": "test-analyzer",
             "analyzer_version": "1.0.0",
-            "findings": [{"id": "f1", "title": "Test", "severity": "MEDIUM", "confidence": 75, "description": "Test", "source": "test", "created_at": "2024-01-01T00:00:00Z"}],
+            "findings": [
+                {
+                    "id": "f1",
+                    "title": "Test",
+                    "severity": "MEDIUM",
+                    "confidence": 75,
+                    "description": "Test",
+                    "evidence": [{"type": "string", "value": "test"}],
+                    "source": "test",
+                    "created_at": "2024-01-01T00:00:00Z",
+                }
+            ],
             "iocs": [],
             "artifacts": [],
         }
-        report = merge_partial_outputs([partial], input_data, "triage", "hash")
+        report = merge_partial_outputs([partial], input_data, "triage", "b" * 64)
         assert len(report["findings"]) == 1
         assert report["findings"][0]["id"] == "f1"
         assert len(report["provenance"]["engines"]) == 1
@@ -127,7 +138,18 @@ class TestReportMerger:
                 "schema_version": "1.0.0",
                 "analyzer_name": "analyzer-a",
                 "analyzer_version": "1.0.0",
-                "findings": [{"id": "f1", "title": "A", "severity": "LOW", "confidence": 50, "description": "A", "source": "a", "created_at": "2024-01-01T00:00:00Z"}],
+                "findings": [
+                    {
+                        "id": "f1",
+                        "title": "A",
+                        "severity": "LOW",
+                        "confidence": 50,
+                        "description": "A",
+                        "evidence": [{"type": "string", "value": "a"}],
+                        "source": "a",
+                        "created_at": "2024-01-01T00:00:00Z",
+                    }
+                ],
                 "iocs": [],
                 "artifacts": [],
             },
@@ -135,12 +157,23 @@ class TestReportMerger:
                 "schema_version": "1.0.0",
                 "analyzer_name": "analyzer-b",
                 "analyzer_version": "1.0.0",
-                "findings": [{"id": "f2", "title": "B", "severity": "HIGH", "confidence": 80, "description": "B", "source": "b", "created_at": "2024-01-01T00:00:00Z"}],
+                "findings": [
+                    {
+                        "id": "f2",
+                        "title": "B",
+                        "severity": "HIGH",
+                        "confidence": 80,
+                        "description": "B",
+                        "evidence": [{"type": "string", "value": "b"}],
+                        "source": "b",
+                        "created_at": "2024-01-01T00:00:00Z",
+                    }
+                ],
                 "iocs": [],
                 "artifacts": [],
             },
         ]
-        report = merge_partial_outputs(partials, input_data, "deep", "hash")
+        report = merge_partial_outputs(partials, input_data, "deep", "b" * 64)
         assert len(report["findings"]) == 2
         assert len(report["provenance"]["engines"]) == 2
 
@@ -156,7 +189,18 @@ class TestReportMerger:
                 "schema_version": "1.0.0",
                 "analyzer_name": "z-analyzer",
                 "analyzer_version": "1.0.0",
-                "findings": [{"id": "f2", "title": "Z", "severity": "LOW", "confidence": 50, "description": "Z", "source": "z", "created_at": "2024-01-01T00:00:00Z"}],
+                "findings": [
+                    {
+                        "id": "f2",
+                        "title": "Z",
+                        "severity": "LOW",
+                        "confidence": 50,
+                        "description": "Z",
+                        "evidence": [{"type": "string", "value": "z"}],
+                        "source": "z",
+                        "created_at": "2024-01-01T00:00:00Z",
+                    }
+                ],
                 "iocs": [],
                 "artifacts": [],
             },
@@ -164,14 +208,25 @@ class TestReportMerger:
                 "schema_version": "1.0.0",
                 "analyzer_name": "a-analyzer",
                 "analyzer_version": "1.0.0",
-                "findings": [{"id": "f1", "title": "A", "severity": "HIGH", "confidence": 80, "description": "A", "source": "a", "created_at": "2024-01-01T00:00:00Z"}],
+                "findings": [
+                    {
+                        "id": "f1",
+                        "title": "A",
+                        "severity": "HIGH",
+                        "confidence": 80,
+                        "description": "A",
+                        "evidence": [{"type": "string", "value": "a"}],
+                        "source": "a",
+                        "created_at": "2024-01-01T00:00:00Z",
+                    }
+                ],
                 "iocs": [],
                 "artifacts": [],
             },
         ]
-        report1 = merge_partial_outputs(partials, input_data, "deep", "hash")
-        report2 = merge_partial_outputs(list(reversed(partials)), input_data, "deep", "hash")
-        
+        report1 = merge_partial_outputs(partials, input_data, "deep", "b" * 64)
+        report2 = merge_partial_outputs(list(reversed(partials)), input_data, "deep", "b" * 64)
+
         # Findings should be in same order regardless of input order
         assert report1["findings"] == report2["findings"]
         assert report1["provenance"]["engines"] == report2["provenance"]["engines"]

@@ -197,6 +197,11 @@
         "analysis_start": { "type": "string", "format": "date-time" },
         "analysis_end": { "type": "string", "format": "date-time" }
       }
+    },
+    "_metadata": {
+      "type": "object",
+      "description": "Internal per-analyzer metadata, keyed by analyzer name",
+      "additionalProperties": true
     }
   }
 }

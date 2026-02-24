@@ -5,6 +5,25 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from scarabeo.validation import validate_partial, validate_report
+
+
+def _build_hashes(metadata: dict, sample_sha256: str) -> dict:
+    """
+    Return the hashes dict for the final report.
+
+    Prefers hashes provided by triage-universal or similarity-analyzer. If
+    neither supplies a sha256, falls back to the sample_sha256 from input_data
+    so that the required 'sha256' field is always present.
+    """
+    hashes = (
+        metadata.get("triage-universal", {}).get("hashes", {})
+        or metadata.get("similarity-analyzer", {}).get("hashes", {})
+    )
+    if "sha256" not in hashes:
+        hashes = {"sha256": sample_sha256, **hashes}
+    return hashes
+
 
 def merge_partial_outputs(
     partials: list[dict],
@@ -29,6 +48,11 @@ def merge_partial_outputs(
     all_artifacts = []
     engines_run = []
     metadata = {}
+
+    # Validate each partial before merging — fail closed on any violation
+    for i, partial in enumerate(partials):
+        analyzer_name = partial.get("analyzer_name", f"unknown[{i}]")
+        validate_partial(partial, analyzer_name)
 
     # Collect all findings, IOCs, artifacts
     for partial in partials:
@@ -79,7 +103,7 @@ def merge_partial_outputs(
         "sample_sha256": input_data["sample_sha256"],
         "tenant_id": input_data["tenant_id"],
         "file_type": input_data.get("metadata", {}).get("file_type", "unknown"),
-        "hashes": metadata.get("triage-universal", {}).get("hashes", {}) or metadata.get("similarity-analyzer", {}).get("hashes", {}),
+        "hashes": _build_hashes(metadata, input_data["sample_sha256"]),
         "summary": {
             "verdict": verdict,
             "score": score,
@@ -101,6 +125,7 @@ def merge_partial_outputs(
         "_metadata": metadata,  # Internal metadata from analyzers
     }
 
+    validate_report(report)
     return report
 
 

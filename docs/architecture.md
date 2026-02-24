@@ -107,6 +107,23 @@ Analyzers are modular components that perform specific analysis tasks. Each anal
    - Generates final report conforming to `report.schema.json`
 6. **Retrieval**: Client fetches results via `GET /samples/{sha256}/report`
 
+### Schema Validation
+
+Schema validation is enforced at runtime in the worker pipeline. Before any
+partial outputs are merged, each partial is validated against
+`contracts/schemas/partial.schema.json`. After merging, the assembled report
+is validated against `contracts/schemas/report.schema.json`. Both checks use
+`jsonschema.Draft202012Validator`.
+
+If validation fails, the job is marked `FAILED` immediately with an error
+message that identifies:
+- Which schema failed (`partial` or `report`)
+- Which analyzer produced the invalid output (for partials)
+- The exact JSON path of the violation
+- The jsonschema error message
+
+This is a fail-closed design: no invalid report is stored.
+
 ## Storage
 
 ### PostgreSQL

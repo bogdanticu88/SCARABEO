@@ -58,6 +58,11 @@ The worker uses **partial output merging** (preferred approach):
 1. Each analyzer produces `partial.json` with its findings, IOCs, and artifacts
 2. Worker merges all partial outputs into final `report.json`
 3. Merge is deterministic: sorted by analyzer name, then by finding/ioc/artifact id
+4. Before merging, each partial is validated against `contracts/schemas/partial.schema.json`.
+   After merging, the final report is validated against `contracts/schemas/report.schema.json`.
+   Validation failures abort the job with a descriptive error (schema name, field path, reason).
+   Schema validation is enforced at runtime — analyzers that produce non-conforming output
+   will cause the job to fail.
 
 ## Analyzer Routing
 
