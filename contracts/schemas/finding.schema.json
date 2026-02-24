@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scarabeo.io/schemas/finding.schema.json",
+  "title": "Security Finding",
+  "description": "Schema for security findings detected during analysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "severity",
+    "confidence",
+    "description",
+    "evidence",
+    "source",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the finding"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short descriptive title of the finding"
+    },
+    "severity": {
+      "type": "string",
+      "description": "Severity level of the finding",
+      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    },
+    "confidence": {
+      "type": "integer",
+      "description": "Confidence score from 0 to 100",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the finding"
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Evidence supporting the finding",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "value"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Type of evidence (e.g., string, bytes, file, registry)"
+          },
+          "value": {
+            "type": "string",
+            "description": "Evidence value or reference"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Offset in the sample where evidence was found",
+            "minimum": 0
+          },
+          "length": {
+            "type": "integer",
+            "description": "Length of the evidence data",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "description": "Tags associated with the finding",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source": {
+      "type": "string",
+      "description": "Name of the engine or analyzer that produced this finding"
+    },
+    "references": {
+      "type": "array",
+      "description": "External references (URLs, CVEs, MITRE ATT&CK IDs)",
+      "items": {
+        "type": "string"
+      }
+    },
+    "affected_objects": {
+      "type": "array",
+      "description": "Objects affected by this finding (files, processes, registry keys)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "identifier"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Type of affected object"
+          },
+          "identifier": {
+            "type": "string",
+            "description": "Unique identifier of the affected object"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of how this object is affected"
+          }
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when the finding was created",
+      "format": "date-time"
+    }
+  }
+}

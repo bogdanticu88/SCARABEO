@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scarabeo.io/schemas/input.schema.json",
+  "title": "Analysis Input",
+  "description": "Schema for sample analysis input payloads",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sample_sha256",
+    "tenant_id",
+    "sample"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version identifier",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sample_sha256": {
+      "type": "string",
+      "description": "SHA-256 hash of the sample being analyzed",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Tenant identifier for multi-tenancy isolation",
+      "minLength": 1
+    },
+    "sample": {
+      "type": "object",
+      "description": "Sample metadata and content reference",
+      "additionalProperties": false,
+      "required": ["filename", "size_bytes"],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "Original filename of the sample"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "description": "Size of the sample in bytes",
+          "minimum": 0
+        },
+        "mime_type": {
+          "type": "string",
+          "description": "MIME type of the sample"
+        },
+        "storage_path": {
+          "type": "string",
+          "description": "Path to sample in object storage"
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "description": "Analysis options and configuration",
+      "additionalProperties": false,
+      "properties": {
+        "timeout_seconds": {
+          "type": "integer",
+          "description": "Maximum analysis duration in seconds",
+          "minimum": 1
+        },
+        "engines": {
+          "type": "array",
+          "description": "List of engine names to run",
+          "items": {
+            "type": "string"
+          }
+        },
+        "priority": {
+          "type": "string",
+          "description": "Analysis priority level",
+          "enum": ["low", "normal", "high", "critical"]
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata for the analysis request",
+      "additionalProperties": true
+    }
+  }
+}

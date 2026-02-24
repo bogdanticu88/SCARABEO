@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scarabeo.io/schemas/partial.schema.json",
+  "title": "Partial Analyzer Output",
+  "description": "Schema for partial analyzer outputs that will be merged into final report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analyzer_name",
+    "analyzer_version",
+    "findings",
+    "iocs",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version identifier",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "analyzer_name": {
+      "type": "string",
+      "description": "Name of the analyzer that produced this output"
+    },
+    "analyzer_version": {
+      "type": "string",
+      "description": "Version of the analyzer"
+    },
+    "findings": {
+      "type": "array",
+      "description": "List of security findings from this analyzer",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "severity", "confidence", "description", "source", "created_at"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the finding"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short descriptive title"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+          },
+          "confidence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "value"],
+              "properties": {
+                "type": {"type": "string"},
+                "value": {"type": "string"},
+                "offset": {"type": "integer", "minimum": 0},
+                "length": {"type": "integer", "minimum": 0}
+              }
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "source": {
+            "type": "string"
+          },
+          "references": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "affected_objects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "identifier"],
+              "properties": {
+                "type": {"type": "string"},
+                "identifier": {"type": "string"},
+                "description": {"type": "string"}
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "iocs": {
+      "type": "array",
+      "description": "List of IOCs extracted by this analyzer",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "value", "normalized", "confidence", "first_seen_in"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["ip", "domain", "url", "email", "hash", "mutex", "filepath", "registry", "useragent"]
+          },
+          "value": {"type": "string"},
+          "normalized": {"type": "string"},
+          "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+          "context": {"type": "string"},
+          "first_seen_in": {"type": "string"},
+          "tags": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "List of artifacts produced by this analyzer",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "path", "produced_by"],
+        "properties": {
+          "type": {"type": "string"},
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+          "mime": {"type": "string"},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "produced_by": {"type": "string"},
+          "safe_preview": {"type": "string"}
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional analyzer-specific metadata",
+      "additionalProperties": true
+    }
+  }
+}

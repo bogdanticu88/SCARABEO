@@ -1,0 +1,88 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scarabeo-orchestrator-config
+  namespace: scarabeo
+data:
+  HOST: "0.0.0.0"
+  PORT: "8001"
+  LOG_LEVEL: "INFO"
+  METRICS_ENABLED: "true"
+  AUTH_MODE: "header"
+  MAX_CONCURRENT_JOBS: "10"
+  JOB_TIMEOUT_SECONDS: "600"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: scarabeo-orchestrator-secret
+  namespace: scarabeo
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://scarabeo:$(POSTGRES_PASSWORD)@postgres:5432/scarabeo"
+  REDIS_URL: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+  ADMIN_TOKEN: "$(ADMIN_TOKEN)"
+  JOB_QUEUE_NAME: "scarabeo:jobs:triage"
+  WORKER_DISPATCH_QUEUE: "scarabeo:workers:dispatch"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scarabeo-orchestrator
+  namespace: scarabeo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestrator
+  template:
+    metadata:
+      labels:
+        app: orchestrator
+    spec:
+      containers:
+        - name: orchestrator
+          image: scarabeo/orchestrator:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8001
+              name: http
+          envFrom:
+            - configMapRef:
+                name: scarabeo-orchestrator-config
+            - secretRef:
+                name: scarabeo-orchestrator-secret
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+  namespace: scarabeo
+spec:
+  selector:
+    app: orchestrator
+  ports:
+    - port: 8001
+      targetPort: 8001
+      name: http
+  type: ClusterIP

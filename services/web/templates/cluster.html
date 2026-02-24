@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCARABEO - Cluster {{ cluster.cluster_id[:8] }}...</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+        .header { background: #1a1a2e; color: #fff; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 1.5rem; }
+        .nav { display: flex; gap: 1rem; }
+        .nav a { color: #fff; text-decoration: none; padding: 0.5rem 1rem; border-radius: 4px; }
+        .nav a:hover { background: rgba(255,255,255,0.1); }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+        .card-header { padding: 1rem; border-bottom: 1px solid #eee; }
+        .card-body { padding: 1rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .stat { background: #f8f9fa; padding: 1rem; border-radius: 4px; }
+        .stat-label { font-size: 0.75rem; color: #666; text-transform: uppercase; }
+        .stat-value { font-size: 1.25rem; font-weight: 600; margin-top: 0.25rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; }
+        .sha256 { font-family: monospace; font-size: 0.875rem; }
+        .score { font-weight: 600; }
+        .score-high { color: #c00; }
+        .score-medium { color: #856404; }
+        .score-low { color: #28a745; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>SCARABEO</h1>
+        <nav class="nav">
+            <a href="/">Samples</a>
+            <a href="/search">Search</a>
+            <a href="/clusters">Clusters</a>
+        </nav>
+    </div>
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2>Cluster Details</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid">
+                    <div class="stat">
+                        <div class="stat-label">Cluster ID</div>
+                        <div class="stat-value sha256">{{ cluster.cluster_id }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Algorithm</div>
+                        <div class="stat-value">{{ cluster.algorithm }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Threshold</div>
+                        <div class="stat-value">{{ cluster.threshold }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Members</div>
+                        <div class="stat-value">{{ cluster.members|length }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3>Cluster Members</h3>
+            </div>
+            <div class="card-body">
+                {% if cluster.members %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Sample SHA256</th>
+                            <th>Similarity Score</th>
+                            <th>Added</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in cluster.members %}
+                        <tr>
+                            <td><a href="/sample/{{ m.sample_sha256 }}" class="sha256">{{ m.sample_sha256 }}</a></td>
+                            <td class="score {% if m.score >= 80 %}score-high{% elif m.score >= 50 %}score-medium{% else %}score-low{% endif %}">{{ m.score }}</td>
+                            <td>{{ m.added_at[:10] if m.added_at else 'N/A' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p>No members in this cluster.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,216 @@
+services:
+  postgres:
+    image: postgres:16.1-alpine
+    container_name: scarabeo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scarabeo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scarabeo_dev_password}
+      POSTGRES_DB: scarabeo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scarabeo -d scarabeo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - scarabeo-net
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: scarabeo-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-scarabeo_dev_password}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD:-scarabeo_dev_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - scarabeo-net
+
+  minio:
+    image: minio/minio:RELEASE.2024-01-01T16-36-33Z
+    container_name: scarabeo-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-scarabeo}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-scarabeo_dev_password}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - scarabeo-net
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-01-01T16-36-33Z
+    container_name: scarabeo-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set scarabeo http://minio:9000 ${MINIO_ROOT_USER:-scarabeo} ${MINIO_ROOT_PASSWORD:-scarabeo_dev_password};
+      mc mb --ignore-existing scarabeo/${S3_BUCKET:-scarabeo-samples};
+      mc anonymous set download scarabeo/${S3_BUCKET:-scarabeo-samples};
+      exit 0;
+      "
+    networks:
+      - scarabeo-net
+
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: services/orchestrator/Dockerfile
+    image: scarabeo/orchestrator:latest
+    container_name: scarabeo-orchestrator
+    restart: unless-stopped
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8001
+      - DATABASE_URL=postgresql://scarabeo:scarabeo_dev_password@postgres:5432/scarabeo
+      - REDIS_URL=redis://:scarabeo_dev_password@redis:6379/0
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-orchestrator_admin_secret_token}
+      - JOB_QUEUE_NAME=scarabeo:jobs:triage
+      - WORKER_DISPATCH_QUEUE=scarabeo:workers:dispatch
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - scarabeo-net
+
+  worker:
+    build:
+      context: ..
+      dockerfile: services/worker/Dockerfile
+    image: scarabeo/worker:latest
+    container_name: scarabeo-worker
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://scarabeo:scarabeo_dev_password@postgres:5432/scarabeo
+      - REDIS_URL=redis://:scarabeo_dev_password@redis:6379/0
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_ACCESS_KEY=scarabeo
+      - S3_SECRET_KEY=scarabeo_dev_password
+      - S3_BUCKET=scarabeo-samples
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - worker-temp:/tmp/worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - scarabeo-net
+
+  ingest:
+    build:
+      context: ..
+      dockerfile: services/ingest/Dockerfile
+    image: scarabeo/ingest:latest
+    container_name: scarabeo-ingest
+    restart: unless-stopped
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DATABASE_URL=postgresql://scarabeo:scarabeo_dev_password@postgres:5432/scarabeo
+      - REDIS_URL=redis://:scarabeo_dev_password@redis:6379/0
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_ACCESS_KEY=scarabeo
+      - S3_SECRET_KEY=scarabeo_dev_password
+      - S3_BUCKET=scarabeo-samples
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - scarabeo-net
+
+  search:
+    build:
+      context: ..
+      dockerfile: services/search/Dockerfile
+    image: scarabeo/search:latest
+    container_name: scarabeo-search
+    restart: unless-stopped
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8002
+      - DATABASE_URL=postgresql://scarabeo:scarabeo_dev_password@postgres:5432/scarabeo
+      - REDIS_URL=redis://:scarabeo_dev_password@redis:6379/0
+      - SEARCH_BACKEND=postgres
+      - MAX_PAGE_SIZE=100
+      - DEFAULT_PAGE_SIZE=20
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - scarabeo-net
+
+  web:
+    build:
+      context: ..
+      dockerfile: services/web/Dockerfile
+    image: scarabeo/web:latest
+    container_name: scarabeo-web
+    restart: unless-stopped
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - INGEST_API_URL=http://ingest:8000
+      - SEARCH_API_URL=http://search:8002
+    ports:
+      - "8080:8080"
+    depends_on:
+      ingest:
+        condition: service_healthy
+      search:
+        condition: service_healthy
+    networks:
+      - scarabeo-net
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  worker-temp:
+    driver: local
+
+networks:
+  scarabeo-net:
+    driver: bridge

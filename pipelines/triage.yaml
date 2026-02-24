@@ -1,0 +1,26 @@
+name: triage
+version: "1.0"
+description: "Basic triage analysis pipeline using universal static analyzer"
+
+engines:
+  - name: triage-universal
+    version: "0.1.0"
+    type: static
+    container: scarabeo/triage-universal:latest
+
+limits:
+  max_file_size_mb: 100
+  timeout_seconds: 300
+  cpu_limit: 2.0
+  memory_limit: 2g
+
+analysis:
+  features:
+    - strings
+    - entropy
+    - ioc_extraction
+    - hash_verification
+
+output:
+  - report.json
+  - artifacts/strings.txt

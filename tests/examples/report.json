@@ -1,0 +1,128 @@
+{
+  "schema_version": "1.0.0",
+  "sample_sha256": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+  "tenant_id": "tenant-123",
+  "file_type": "PE32 executable (GUI) Intel 80386, for MS Windows",
+  "hashes": {
+    "md5": "d41d8cd98f00b204e9800998ecf8427e",
+    "sha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "sha256": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+    "sha512": "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+    "ssdeep": "12288:Rlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqf:Rlqfqlqfqlqfqlqfqlqfqlqfqlqfqlqf",
+    "tlsh": "T1A2B3C4D5E6F7890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890"
+  },
+  "summary": {
+    "verdict": "malicious",
+    "score": 92,
+    "threat_family": "Emotet",
+    "detection_names": ["Trojan.Emotet.A", "HEUR:Trojan.Win32.Emotet"]
+  },
+  "findings": [
+    {
+      "id": "finding-001",
+      "title": "Suspicious API Imports",
+      "severity": "MEDIUM",
+      "confidence": 85,
+      "description": "The sample imports APIs commonly used for process injection and memory manipulation",
+      "evidence": [
+        {"type": "import", "value": "VirtualAllocEx", "offset": 4096},
+        {"type": "import", "value": "WriteProcessMemory", "offset": 4112},
+        {"type": "import", "value": "CreateRemoteThread", "offset": 4128}
+      ],
+      "tags": ["injection", "evasion"],
+      "source": "static-analyzer",
+      "references": ["https://attack.mitre.org/techniques/T1055/"],
+      "affected_objects": [],
+      "created_at": "2024-01-15T10:02:30Z"
+    },
+    {
+      "id": "finding-002",
+      "title": "Network Connection to Known C2",
+      "severity": "CRITICAL",
+      "confidence": 95,
+      "description": "Sample attempted to establish connection to known command and control infrastructure",
+      "evidence": [
+        {"type": "network", "value": "HTTP POST to 185.234.72.15:443", "offset": 0}
+      ],
+      "tags": ["c2", "network", "emotet"],
+      "source": "dynamic-analyzer",
+      "references": ["CVE-2024-1234", "https://attack.mitre.org/techniques/T1071/"],
+      "affected_objects": [
+        {"type": "process", "identifier": "pid:4532", "description": "Main sample process"}
+      ],
+      "created_at": "2024-01-15T10:05:45Z"
+    }
+  ],
+  "iocs": [
+    {
+      "type": "ip",
+      "value": "185.234.72.15",
+      "normalized": "185.234.72.15",
+      "confidence": 95,
+      "context": "Command and control server",
+      "first_seen_in": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+      "tags": ["c2", "emotet"]
+    },
+    {
+      "type": "domain",
+      "value": "update-service.malware-c2.com",
+      "normalized": "update-service.malware-c2.com",
+      "confidence": 90,
+      "context": "Domain resolved during execution",
+      "first_seen_in": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+      "tags": ["c2", "dns"]
+    },
+    {
+      "type": "mutex",
+      "value": "Global\\EmotetMutex_2024",
+      "normalized": "global\\emotetmutex_2024",
+      "confidence": 88,
+      "context": "Mutex created for instance locking",
+      "first_seen_in": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+      "tags": ["persistence", "emotet"]
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "/artifacts/a665a459/screenshot_001.png",
+      "sha256": "b665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27be4",
+      "mime": "image/png",
+      "size_bytes": 245000,
+      "produced_by": "dynamic-analyzer"
+    },
+    {
+      "type": "pcap",
+      "path": "/artifacts/a665a459/capture.pcap",
+      "sha256": "c665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27cf5",
+      "mime": "application/vnd.tcpdump.pcap",
+      "size_bytes": 128000,
+      "produced_by": "dynamic-analyzer"
+    },
+    {
+      "type": "extracted_file",
+      "path": "/artifacts/a665a459/dropped_payload.dll",
+      "sha256": "d665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27d06",
+      "mime": "application/x-dosexec",
+      "size_bytes": 51200,
+      "produced_by": "dynamic-analyzer",
+      "safe_preview": "TVqQAAMAAAAEAAAA//8AALgAAAA..."
+    }
+  ],
+  "provenance": {
+    "pipeline_name": "full-analysis-pipeline",
+    "pipeline_hash": "e665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27e17",
+    "engines": [
+      {"name": "static-analyzer", "version": "2.1.0"},
+      {"name": "dynamic-analyzer", "version": "3.0.5"},
+      {"name": "unpacker", "version": "1.2.0"}
+    ],
+    "container_image": "scarabeo/worker:1.0.0",
+    "config_hash": "f665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27f28",
+    "deterministic_run": true
+  },
+  "timestamps": {
+    "analysis_start": "2024-01-15T10:00:00Z",
+    "analysis_end": "2024-01-15T10:08:32Z"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scarabeo.io/schemas/provenance.schema.json",
+  "title": "Analysis Provenance",
+  "description": "Schema for tracking analysis provenance and reproducibility",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pipeline_name",
+    "pipeline_hash",
+    "engines",
+    "config_hash",
+    "deterministic_run"
+  ],
+  "properties": {
+    "pipeline_name": {
+      "type": "string",
+      "description": "Name of the analysis pipeline"
+    },
+    "pipeline_hash": {
+      "type": "string",
+      "description": "Hash of the pipeline configuration",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "engines": {
+      "type": "array",
+      "description": "List of engines used in the analysis",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the engine"
+          },
+          "version": {
+            "type": "string",
+            "description": "Version of the engine"
+          }
+        }
+      }
+    },
+    "container_image": {
+      "type": "string",
+      "description": "Container image used for analysis (optional)"
+    },
+    "config_hash": {
+      "type": "string",
+      "description": "Hash of the analysis configuration",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "deterministic_run": {
+      "type": "boolean",
+      "description": "Whether the analysis was run in deterministic mode",
+      "const": true
+    }
+  }
+}

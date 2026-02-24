@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scarabeo.io/schemas/ioc.schema.json",
+  "title": "Indicator of Compromise",
+  "description": "Schema for IOCs extracted during analysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "value",
+    "normalized",
+    "confidence",
+    "first_seen_in"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "description": "Type of IOC",
+      "enum": ["ip", "domain", "url", "email", "hash", "mutex", "filepath", "registry", "useragent"]
+    },
+    "value": {
+      "type": "string",
+      "description": "Raw IOC value as extracted"
+    },
+    "normalized": {
+      "type": "string",
+      "description": "Normalized/canonical form of the IOC value"
+    },
+    "confidence": {
+      "type": "integer",
+      "description": "Confidence score from 0 to 100",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "context": {
+      "type": "string",
+      "description": "Context surrounding the IOC extraction"
+    },
+    "first_seen_in": {
+      "type": "string",
+      "description": "Identifier of the sample/artifact where this IOC was first seen"
+    },
+    "tags": {
+      "type": "array",
+      "description": "Tags associated with the IOC",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

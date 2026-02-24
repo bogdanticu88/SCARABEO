@@ -1,0 +1,9 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scarabeo
+  labels:
+    name: scarabeo
+    app.kubernetes.io/name: scarabeo
+    app.kubernetes.io/component: platform

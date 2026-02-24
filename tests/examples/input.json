@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "sample_sha256": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+  "tenant_id": "tenant-123",
+  "sample": {
+    "filename": "suspicious.exe",
+    "size_bytes": 245760,
+    "mime_type": "application/x-dosexec",
+    "storage_path": "s3://samples/a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
+  },
+  "options": {
+    "timeout_seconds": 300,
+    "engines": ["static", "dynamic", "unpacker"],
+    "priority": "high"
+  },
+  "metadata": {
+    "source": "email_attachment",
+    "campaign_id": "APT-CAMPAIGN-001"
+  }
+}

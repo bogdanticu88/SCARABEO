@@ -1,0 +1,72 @@
+name: deep
+version: "2.0"
+description: "Comprehensive static analysis pipeline"
+
+engines:
+  - name: triage-universal
+    version: "0.1.0"
+    type: static
+    container: scarabeo/triage-universal:latest
+    always_run: true
+
+  - name: pe-analyzer
+    version: "0.1.0"
+    type: static
+    container: scarabeo/pe-analyzer:latest
+    condition: "file_type == 'pe'"
+
+  - name: elf-analyzer
+    version: "0.1.0"
+    type: static
+    container: scarabeo/elf-analyzer:latest
+    condition: "file_type == 'elf'"
+
+  - name: script-analyzer
+    version: "0.1.0"
+    type: static
+    container: scarabeo/script-analyzer:latest
+    condition: "file_type == 'script'"
+
+  - name: doc-analyzer
+    version: "0.1.0"
+    type: static
+    container: scarabeo/doc-analyzer:latest
+    condition: "file_type == 'document'"
+
+  - name: archive-analyzer
+    version: "0.1.0"
+    type: static
+    container: scarabeo/archive-analyzer:latest
+    condition: "file_type == 'archive'"
+
+  - name: similarity-analyzer
+    version: "0.1.0"
+    type: static
+    container: scarabeo/similarity-analyzer:latest
+    always_run: true
+
+  - name: yara-analyzer
+    version: "0.1.0"
+    type: static
+    container: scarabeo/yara-analyzer:latest
+    optional: true
+    feature_flag: YARA_ENABLED
+
+  - name: capa-analyzer
+    version: "0.1.0"
+    type: static
+    container: scarabeo/capa-analyzer:latest
+    optional: true
+    feature_flag: CAPA_ENABLED
+
+limits:
+  max_file_size_mb: 100
+  timeout_seconds: 600
+  cpu_limit: 4.0
+  memory_limit: 4g
+
+output:
+  - report.json
+  - artifacts/
+
+merge_strategy: partial_outputs

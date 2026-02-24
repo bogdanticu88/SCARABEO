@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analysis Report",
+  "description": "Schema for complete analysis reports",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sample_sha256",
+    "tenant_id",
+    "file_type",
+    "hashes",
+    "summary",
+    "findings",
+    "iocs",
+    "artifacts",
+    "provenance",
+    "timestamps"
+  ],
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "severity", "confidence", "description", "evidence", "source", "created_at"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "severity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "confidence": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "description": { "type": "string" },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "value"],
+            "properties": {
+              "type": { "type": "string" },
+              "value": { "type": "string" },
+              "offset": { "type": "integer", "minimum": 0 },
+              "length": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "source": { "type": "string" },
+        "references": { "type": "array", "items": { "type": "string" } },
+        "affected_objects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "identifier"],
+            "properties": {
+              "type": { "type": "string" },
+              "identifier": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ioc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value", "normalized", "confidence", "first_seen_in"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ip", "domain", "url", "email", "hash", "mutex", "filepath", "registry", "useragent"]
+        },
+        "value": { "type": "string" },
+        "normalized": { "type": "string" },
+        "confidence": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "context": { "type": "string" },
+        "first_seen_in": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "path", "sha256", "produced_by"],
+      "properties": {
+        "type": { "type": "string" },
+        "path": { "type": "string" },
+        "sha256": { "type": "string" },
+        "mime": { "type": "string" },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "produced_by": { "type": "string" },
+        "safe_preview": { "type": "string" }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version identifier",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sample_sha256": {
+      "type": "string",
+      "description": "SHA-256 hash of the analyzed sample",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Tenant identifier for multi-tenancy isolation"
+    },
+    "file_type": {
+      "type": "string",
+      "description": "Detected file type of the sample"
+    },
+    "hashes": {
+      "type": "object",
+      "description": "Cryptographic hashes of the sample",
+      "additionalProperties": false,
+      "required": ["sha256"],
+      "properties": {
+        "md5": { "type": "string", "pattern": "^[a-fA-F0-9]{32}$" },
+        "sha1": { "type": "string", "pattern": "^[a-fA-F0-9]{40}$" },
+        "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "sha512": { "type": "string", "pattern": "^[a-fA-F0-9]{128}$" },
+        "ssdeep": { "type": "string" },
+        "tlsh": { "type": "string" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "Analysis summary",
+      "additionalProperties": false,
+      "required": ["verdict", "score"],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["benign", "suspicious", "malicious", "unknown"]
+        },
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "threat_family": { "type": "string" },
+        "detection_names": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "List of security findings",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "iocs": {
+      "type": "array",
+      "description": "List of indicators of compromise",
+      "items": { "$ref": "#/$defs/ioc" }
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "List of artifacts produced during analysis",
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Provenance information for reproducibility",
+      "additionalProperties": false,
+      "required": ["pipeline_name", "pipeline_hash", "engines", "config_hash", "deterministic_run"],
+      "properties": {
+        "pipeline_name": { "type": "string" },
+        "pipeline_hash": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "engines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version"],
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" }
+            }
+          }
+        },
+        "container_image": { "type": "string" },
+        "config_hash": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "deterministic_run": { "type": "boolean", "const": true }
+      }
+    },
+    "timestamps": {
+      "type": "object",
+      "description": "Analysis timestamps",
+      "additionalProperties": false,
+      "required": ["analysis_start", "analysis_end"],
+      "properties": {
+        "analysis_start": { "type": "string", "format": "date-time" },
+        "analysis_end": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

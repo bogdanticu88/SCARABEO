@@ -1,0 +1,488 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Scarabeo Analysis API",
+    "description": "API for submitting samples and retrieving analysis results",
+    "version": "0.1.0",
+    "contact": {
+      "name": "Scarabeo Security"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.scarabeo.io/v1",
+      "description": "Production server"
+    },
+    {
+      "url": "https://staging-api.scarabeo.io/v1",
+      "description": "Staging server"
+    }
+  ],
+  "paths": {
+    "/samples": {
+      "post": {
+        "summary": "Submit a sample for analysis",
+        "description": "Upload a file sample for security analysis. Returns a submission ID for tracking.",
+        "operationId": "submitSample",
+        "tags": ["Samples"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "The sample file to analyze"
+                  },
+                  "priority": {
+                    "type": "string",
+                    "description": "Analysis priority level",
+                    "enum": ["low", "normal", "high", "critical"],
+                    "default": "normal"
+                  },
+                  "timeout": {
+                    "type": "integer",
+                    "description": "Maximum analysis time in seconds",
+                    "minimum": 60,
+                    "maximum": 3600,
+                    "default": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Sample accepted for analysis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["submission_id", "sha256", "status"],
+                  "properties": {
+                    "submission_id": {
+                      "type": "string",
+                      "description": "Unique submission identifier"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "description": "SHA-256 hash of the submitted sample",
+                      "pattern": "^[a-fA-F0-9]{64}$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "Initial status of the submission",
+                      "enum": ["queued", "processing"]
+                    },
+                    "estimated_time": {
+                      "type": "integer",
+                      "description": "Estimated analysis time in seconds"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {"ApiKeyAuth": []},
+          {"BearerAuth": []}
+        ]
+      },
+      "get": {
+        "summary": "List submitted samples",
+        "description": "Retrieve a paginated list of submitted samples",
+        "operationId": "listSamples",
+        "tags": ["Samples"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (1-indexed)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by analysis status",
+            "schema": {
+              "type": "string",
+              "enum": ["queued", "processing", "completed", "failed"]
+            }
+          },
+          {
+            "name": "verdict",
+            "in": "query",
+            "description": "Filter by verdict (completed analyses only)",
+            "schema": {
+              "type": "string",
+              "enum": ["benign", "suspicious", "malicious", "unknown"]
+            }
+          },
+          {
+            "name": "from_date",
+            "in": "query",
+            "description": "Filter samples submitted after this date (ISO 8601)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "description": "Filter samples submitted before this date (ISO 8601)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of samples",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "pagination"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SampleSummary"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {"ApiKeyAuth": []},
+          {"BearerAuth": []}
+        ]
+      }
+    },
+    "/samples/{sha256}": {
+      "get": {
+        "summary": "Get sample details",
+        "description": "Retrieve detailed information about a specific sample by its SHA-256 hash",
+        "operationId": "getSample",
+        "tags": ["Samples"],
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "description": "SHA-256 hash of the sample",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sample details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sample"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sample not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {"ApiKeyAuth": []},
+          {"BearerAuth": []}
+        ]
+      }
+    },
+    "/samples/{sha256}/report": {
+      "get": {
+        "summary": "Get analysis report",
+        "description": "Retrieve the complete analysis report for a sample",
+        "operationId": "getSampleReport",
+        "tags": ["Reports"],
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "description": "SHA-256 hash of the sample",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Analysis report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisReport"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sample or report not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "425": {
+            "description": "Analysis still in progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "message"],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["queued", "processing"]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {"ApiKeyAuth": []},
+          {"BearerAuth": []}
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error", "message"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message"
+          },
+          "details": {
+            "type": "object",
+            "description": "Additional error details"
+          }
+        }
+      },
+      "SampleSummary": {
+        "type": "object",
+        "required": ["sha256", "filename", "size_bytes", "submitted_at", "status"],
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "processing", "completed", "failed"]
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["benign", "suspicious", "malicious", "unknown"]
+          },
+          "score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      },
+      "Sample": {
+        "type": "object",
+        "required": ["sha256", "filename", "size_bytes", "mime_type", "submitted_at"],
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          },
+          "md5": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{32}$"
+          },
+          "sha1": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{40}$"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "file_type": {
+            "type": "string"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "processing", "completed", "failed"]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AnalysisReport": {
+        "type": "object",
+        "description": "Complete analysis report conforming to report.schema.json"
+      },
+      "Pagination": {
+        "type": "object",
+        "required": ["page", "per_page", "total_items", "total_pages"],
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "per_page": {
+            "type": "integer"
+          },
+          "total_items": {
+            "type": "integer"
+          },
+          "total_pages": {
+            "type": "integer"
+          },
+          "has_next": {
+            "type": "boolean"
+          },
+          "has_prev": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

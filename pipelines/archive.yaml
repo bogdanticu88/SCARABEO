@@ -1,0 +1,39 @@
+name: archive
+version: "1.0"
+description: "Archive analysis pipeline with child job support"
+
+engines:
+  - name: triage-universal
+    version: "0.1.0"
+    type: static
+    container: scarabeo/triage-universal:latest
+    always_run: true
+
+  - name: archive-analyzer
+    version: "0.1.0"
+    type: static
+    container: scarabeo/archive-analyzer:latest
+    always_run: true
+    spawn_child_jobs: true
+    child_job_config:
+      pipeline: triage
+      relationship: extracted_from_archive
+
+limits:
+  max_file_size_mb: 500
+  timeout_seconds: 900
+  cpu_limit: 4.0
+  memory_limit: 4g
+
+archive_settings:
+  max_depth: 5
+  max_total_bytes: 104857600
+  max_file_count: 1000
+  extract_enabled: true
+
+output:
+  - report.json
+  - artifacts/
+  - child_jobs/
+
+merge_strategy: partial_outputs_with_children

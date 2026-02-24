@@ -1,0 +1,86 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scarabeo-worker-config
+  namespace: scarabeo
+data:
+  LOG_LEVEL: "INFO"
+  DOCKER_NETWORK_DISABLED: "true"
+  DOCKER_READONLY_ROOTFS: "true"
+  DOCKER_CPU_LIMIT: "2.0"
+  DOCKER_MEMORY_LIMIT: "2g"
+  ANALYZER_CHUNK_SIZE: "4096"
+  ANALYZER_MAX_STRINGS: "10000"
+  ANALYZER_HIGH_ENTROPY_THRESHOLD: "7.5"
+  YARA_ENABLED: "false"
+  CAPA_ENABLED: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: scarabeo-worker-secret
+  namespace: scarabeo
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://scarabeo:$(POSTGRES_PASSWORD)@postgres:5432/scarabeo"
+  REDIS_URL: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+  S3_ENDPOINT_URL: "http://minio:9000"
+  S3_ACCESS_KEY: "$(MINIO_ROOT_USER)"
+  S3_SECRET_KEY: "$(MINIO_ROOT_PASSWORD)"
+  S3_BUCKET: "scarabeo-samples"
+  DOCKER_IMAGE_TRIAGE: "scarabeo/triage-universal:latest"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scarabeo-worker
+  namespace: scarabeo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: scarabeo/worker:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: scarabeo-worker-config
+            - secretRef:
+                name: scarabeo-worker-secret
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: worker-temp
+              mountPath: /tmp/worker
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: worker-temp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: scarabeo
+spec:
+  selector:
+    app: worker
+  clusterIP: None
