@@ -222,6 +222,57 @@ def normalize_ioc(ioc_type: str, value: str) -> str:
     return value
 
 
+# Magic-byte signatures for file type detection (checked in order)
+_FILE_MAGIC: list[tuple[bytes, int, str]] = [
+    # (magic, offset, file_type)
+    (b"MZ",                    0, "pe"),
+    (b"\x7fELF",               0, "elf"),
+    (b"PK\x03\x04",            0, "archive"),   # ZIP-based
+    (b"PK\x05\x06",            0, "archive"),   # empty ZIP
+    (b"Rar!\x1a\x07\x00",      0, "archive"),   # RAR4
+    (b"Rar!\x1a\x07\x01\x00",  0, "archive"),   # RAR5
+    (b"\x1f\x8b",              0, "archive"),   # gzip
+    (b"BZh",                   0, "archive"),   # bzip2
+    (b"\xfd7zXZ\x00",          0, "archive"),   # xz
+    (b"7z\xbc\xaf\x27\x1c",    0, "archive"),   # 7-zip
+    (b"\xd0\xcf\x11\xe0",      0, "document"),  # OLE2 (doc/xls/ppt)
+    (b"%PDF-",                  0, "document"),
+    (b"#!/",                    0, "script"),
+    (b"#!",                     0, "script"),
+]
+
+_SCRIPT_EXTENSIONS = frozenset([
+    ".ps1", ".psm1", ".psd1",
+    ".vbs", ".vbe", ".js", ".jse",
+    ".sh", ".bash", ".zsh",
+    ".py", ".rb", ".pl",
+    ".bat", ".cmd",
+])
+
+
+def detect_file_type(data: bytes, filename: str | None = None) -> str:
+    """
+    Identify file type from magic bytes, with optional filename hint.
+
+    Returns one of: pe, elf, archive, document, script, unknown.
+    """
+    for magic, offset, file_type in _FILE_MAGIC:
+        end = offset + len(magic)
+        if len(data) >= end and data[offset:end] == magic:
+            return file_type
+
+    if filename:
+        ext = Path(filename).suffix.lower()
+        if ext in _SCRIPT_EXTENSIONS:
+            return "script"
+        if ext in {".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".pdf", ".rtf"}:
+            return "document"
+        if ext in {".zip", ".rar", ".7z", ".gz", ".bz2", ".tar", ".xz"}:
+            return "archive"
+
+    return "unknown"
+
+
 def verify_sha256(data: bytes, expected: str) -> bool:
     """Verify SHA256 hash of data."""
     actual = hashlib.sha256(data).hexdigest()
@@ -393,6 +444,7 @@ def run_analysis(input_data: dict) -> dict:
     tenant_id = input_data["tenant_id"]
     pipeline_name = input_data.get("metadata", {}).get("pipeline_name", "triage")
     pipeline_hash = input_data.get("metadata", {}).get("pipeline_hash", "")
+    filename = input_data.get("metadata", {}).get("filename")
 
     # Read local sample
     if not SAMPLE_PATH.exists():
@@ -422,6 +474,9 @@ def run_analysis(input_data: dict) -> dict:
     # Compute entropy
     logger.info("Computing entropy")
     entropies = compute_chunk_entropies(sample_data)
+
+    # Detect file type from magic bytes (with filename as fallback hint)
+    file_type = detect_file_type(sample_data, filename)
 
     # Calculate average entropy
     avg_entropy = sum(e["entropy"] for e in entropies) / len(entropies) if entropies else 0
@@ -471,7 +526,8 @@ def run_analysis(input_data: dict) -> dict:
         "schema_version": "1.0.0",
         "sample_sha256": sample_sha256,
         "tenant_id": tenant_id,
-        "file_type": "unknown",
+        "file_type": file_type,
+        "avg_entropy": round(avg_entropy, 4),
         "hashes": {
             "md5": md5_hash,
             "sha1": sha1_hash,

@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0.0",
+  "analyzer_name": "pe-analyzer",
+  "analyzer_version": "0.1.0",
+  "findings": [
+    {
+      "id": "pe-entropy-sections",
+      "title": "High-Entropy PE Sections",
+      "severity": "MEDIUM",
+      "confidence": 70,
+      "description": "Found 1 section(s) with entropy >= 7.0, indicating possible encryption or compression.",
+      "evidence": [
+        {"type": "section_entropy", "value": "UPX1:entropy=7.9"}
+      ],
+      "tags": ["entropy", "packing"],
+      "source": "pe-analyzer",
+      "references": [],
+      "created_at": "2024-06-01T12:00:00+00:00"
+    },
+    {
+      "id": "pe-packer-upx",
+      "title": "Packer Detected: UPX",
+      "severity": "MEDIUM",
+      "confidence": 85,
+      "description": "PE section names indicate the file was packed with UPX.",
+      "evidence": [
+        {"type": "section_name", "value": "UPX0"},
+        {"type": "section_name", "value": "UPX1"}
+      ],
+      "tags": ["packer", "evasion", "entropy"],
+      "source": "pe-analyzer",
+      "references": [],
+      "created_at": "2024-06-01T12:00:00+00:00"
+    }
+  ],
+  "iocs": [],
+  "artifacts": [
+    {
+      "type": "pe_summary",
+      "path": "artifacts/pe_summary.json",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "mime": "application/json",
+      "size_bytes": 1024,
+      "produced_by": "pe-analyzer"
+    },
+    {
+      "type": "imports",
+      "path": "artifacts/imports.txt",
+      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "mime": "text/plain",
+      "size_bytes": 128,
+      "produced_by": "pe-analyzer"
+    }
+  ],
+  "metadata": {
+    "file_type": "pe",
+    "machine": "i386",
+    "is_pe32_plus": false,
+    "subsystem": "Windows GUI",
+    "subsystem_code": 2,
+    "timestamp": 0,
+    "timestamp_iso": null,
+    "image_base": "0x400000",
+    "num_sections": 3,
+    "sections": [
+      {
+        "name": "UPX0",
+        "virtual_size": 32768,
+        "virtual_address": 4096,
+        "raw_size": 0,
+        "raw_offset": 0,
+        "characteristics": 3758096384,
+        "entropy": 0.0
+      },
+      {
+        "name": "UPX1",
+        "virtual_size": 8192,
+        "virtual_address": 36864,
+        "raw_size": 8192,
+        "raw_offset": 1024,
+        "characteristics": 3758096384,
+        "entropy": 7.9
+      },
+      {
+        "name": ".rsrc",
+        "virtual_size": 512,
+        "virtual_address": 45056,
+        "raw_size": 512,
+        "raw_offset": 9216,
+        "characteristics": 1073741888,
+        "entropy": 1.2
+      }
+    ],
+    "packers_detected": ["upx"],
+    "timestamp_anomaly": null,
+    "imports": []
+  }
+}
