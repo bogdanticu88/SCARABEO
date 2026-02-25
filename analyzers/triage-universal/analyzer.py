@@ -11,6 +11,14 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+# scarabeo/ioc.py is copied into the container at build time as ioc.py
+from ioc import (
+    deduplicate_ioc_records,
+    extract_iocs,
+    make_ioc_records,
+    sort_ioc_records,
+)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -123,103 +131,8 @@ def extract_strings(data: bytes, min_length: int = 4) -> list[str]:
     return [s[2] for s in strings[:MAX_STRINGS]]
 
 
-def extract_iocs(strings: list[str]) -> dict:
-    """
-    Extract IOCs from strings.
-
-    Args:
-        strings: List of extracted strings
-
-    Returns:
-        Dictionary of IOC lists
-    """
-    iocs = {
-        "urls": [],
-        "domains": [],
-        "ips": [],
-        "emails": [],
-    }
-
-    # URL pattern
-    url_pattern = re.compile(
-        r'https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&\'()*+,;=%]+',
-        re.IGNORECASE
-    )
-
-    # Domain pattern
-    domain_pattern = re.compile(
-        r'\b[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}\b'
-    )
-
-    # IP pattern
-    ip_pattern = re.compile(
-        r'\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b'
-    )
-
-    # Email pattern
-    email_pattern = re.compile(
-        r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b'
-    )
-
-    seen_urls = set()
-    seen_domains = set()
-    seen_ips = set()
-    seen_emails = set()
-
-    for string in strings:
-        # Extract URLs
-        for match in url_pattern.finditer(string):
-            url = match.group()
-            if url not in seen_urls:
-                seen_urls.add(url)
-                iocs["urls"].append(url)
-
-        # Extract domains (excluding URLs)
-        for match in domain_pattern.finditer(string):
-            domain = match.group()
-            # Skip if part of URL
-            if f"http://{domain}" in seen_urls or f"https://{domain}" in seen_urls:
-                continue
-            if domain not in seen_domains:
-                seen_domains.add(domain)
-                iocs["domains"].append(domain)
-
-        # Extract IPs
-        for match in ip_pattern.finditer(string):
-            ip = match.group()
-            if ip not in seen_ips:
-                seen_ips.add(ip)
-                iocs["ips"].append(ip)
-
-        # Extract emails
-        for match in email_pattern.finditer(string):
-            email = match.group()
-            if email not in seen_emails:
-                seen_emails.add(email)
-                iocs["emails"].append(email)
-
-    # Sort for deterministic output
-    iocs["urls"].sort()
-    iocs["domains"].sort()
-    iocs["ips"].sort()
-    iocs["emails"].sort()
-
-    return iocs
-
-
-def normalize_ioc(ioc_type: str, value: str) -> str:
-    """Normalize IOC value."""
-    if ioc_type == "domain":
-        return value.lower()
-    elif ioc_type == "email":
-        return value.lower()
-    elif ioc_type == "url":
-        # Lowercase scheme and domain
-        parts = value.split("://", 1)
-        if len(parts) == 2:
-            return parts[0].lower() + "://" + parts[1].split("/", 2)[0].lower() + "/" + "/".join(parts[1].split("/")[1:])
-        return value.lower()
-    return value
+# extract_iocs, normalize_ioc, and generate_ioc_records are provided by the
+# imported scarabeo ioc module.  See the `ioc` import at the top of this file.
 
 
 # Magic-byte signatures for file type detection (checked in order)
@@ -287,13 +200,8 @@ def generate_findings(
     """
     Generate security findings.
 
-    Args:
-        data: Sample bytes
-        iocs: Extracted IOCs
-        entropies: Chunk entropy data
-
-    Returns:
-        List of findings
+    iocs is the dict returned by scarabeo.ioc.extract_iocs() with keys:
+    url, domain, ip, email, filepath, registry.
     """
     findings = []
     now = datetime.now(timezone.utc).isoformat()
@@ -302,17 +210,17 @@ def generate_findings(
     high_entropy_chunks = [e for e in entropies if e["entropy"] > HIGH_ENTROPY_THRESHOLD]
     if high_entropy_chunks:
         findings.append({
-            "id": f"finding-entropy-{len(findings)}",
+            "id": "triage-entropy-high",
             "title": "High Entropy Content Detected",
             "severity": "MEDIUM",
             "confidence": 75,
-            "description": f"Found {len(high_entropy_chunks)} chunks with entropy above {HIGH_ENTROPY_THRESHOLD}, indicating possible encryption or packing",
+            "description": (
+                f"Found {len(high_entropy_chunks)} chunks with entropy above "
+                f"{HIGH_ENTROPY_THRESHOLD}, indicating possible encryption or packing"
+            ),
             "evidence": [
-                {
-                    "type": "entropy",
-                    "value": f"offset={e['offset']},entropy={e['entropy']}",
-                }
-                for e in high_entropy_chunks[:5]  # Limit evidence
+                {"type": "entropy", "value": f"offset={e['offset']},entropy={e['entropy']}"}
+                for e in high_entropy_chunks[:5]
             ],
             "tags": ["encryption", "packing", "entropy"],
             "source": "triage-universal",
@@ -322,19 +230,21 @@ def generate_findings(
         })
 
     # Network indicators finding
-    if iocs["urls"] or iocs["domains"]:
-        evidence = []
-        for url in iocs["urls"][:5]:
-            evidence.append({"type": "url", "value": url})
-        for domain in iocs["domains"][:5]:
-            evidence.append({"type": "domain", "value": domain})
-
+    urls    = iocs.get("url", [])
+    domains = iocs.get("domain", [])
+    if urls or domains:
+        evidence = (
+            [{"type": "url",    "value": u} for u in urls[:5]]
+            + [{"type": "domain", "value": d} for d in domains[:5]]
+        )
         findings.append({
-            "id": f"finding-network-{len(findings)}",
+            "id": "triage-network-indicators",
             "title": "Network Indicators Detected",
             "severity": "HIGH",
             "confidence": 80,
-            "description": f"Found {len(iocs['urls'])} URLs and {len(iocs['domains'])} domains embedded in sample",
+            "description": (
+                f"Found {len(urls)} URL(s) and {len(domains)} domain(s) embedded in sample"
+            ),
             "evidence": evidence,
             "tags": ["network", "ioc", "c2"],
             "source": "triage-universal",
@@ -344,17 +254,15 @@ def generate_findings(
         })
 
     # Email indicators finding
-    if iocs["emails"]:
+    emails = iocs.get("email", [])
+    if emails:
         findings.append({
-            "id": f"finding-email-{len(findings)}",
+            "id": "triage-email-indicators",
             "title": "Email Addresses Detected",
             "severity": "LOW",
             "confidence": 60,
-            "description": f"Found {len(iocs['emails'])} email addresses embedded in sample",
-            "evidence": [
-                {"type": "email", "value": email}
-                for email in iocs["emails"][:5]
-            ],
+            "description": f"Found {len(emails)} email address(es) embedded in sample",
+            "evidence": [{"type": "email", "value": e} for e in emails[:5]],
             "tags": ["email", "ioc"],
             "source": "triage-universal",
             "references": [],
@@ -362,67 +270,44 @@ def generate_findings(
             "created_at": now,
         })
 
-    return findings
-
-
-def generate_ioc_records(iocs: dict, first_seen_in: str) -> list[dict]:
-    """
-    Generate IOC records for report.
-
-    Args:
-        iocs: Extracted IOCs
-        first_seen_in: Sample identifier
-
-    Returns:
-        List of IOC records
-    """
-    records = []
-
-    for url in iocs["urls"]:
-        records.append({
-            "type": "url",
-            "value": url,
-            "normalized": normalize_ioc("url", url),
-            "confidence": 70,
-            "context": "Extracted from sample strings",
-            "first_seen_in": first_seen_in,
-            "tags": ["network"],
+    # Filesystem path finding
+    filepaths = iocs.get("filepath", [])
+    if filepaths:
+        findings.append({
+            "id": "triage-filesystem-paths",
+            "title": "Filesystem Paths Detected",
+            "severity": "LOW",
+            "confidence": 55,
+            "description": f"Found {len(filepaths)} embedded filesystem path(s)",
+            "evidence": [{"type": "filepath", "value": p} for p in filepaths[:5]],
+            "tags": ["filesystem", "ioc"],
+            "source": "triage-universal",
+            "references": [],
+            "affected_objects": [],
+            "created_at": now,
         })
 
-    for domain in iocs["domains"]:
-        records.append({
-            "type": "domain",
-            "value": domain,
-            "normalized": normalize_ioc("domain", domain),
-            "confidence": 70,
-            "context": "Extracted from sample strings",
-            "first_seen_in": first_seen_in,
-            "tags": ["network"],
-        })
-
-    for ip in iocs["ips"]:
-        records.append({
-            "type": "ip",
-            "value": ip,
-            "normalized": ip,
+    # Registry key finding
+    reg_keys = iocs.get("registry", [])
+    if reg_keys:
+        findings.append({
+            "id": "triage-registry-keys",
+            "title": "Registry Key References Detected",
+            "severity": "LOW",
             "confidence": 60,
-            "context": "Extracted from sample strings",
-            "first_seen_in": first_seen_in,
-            "tags": ["network"],
+            "description": f"Found {len(reg_keys)} Windows registry key reference(s)",
+            "evidence": [{"type": "registry", "value": k} for k in reg_keys[:5]],
+            "tags": ["registry", "persistence"],
+            "source": "triage-universal",
+            "references": [],
+            "affected_objects": [],
+            "created_at": now,
         })
 
-    for email in iocs["emails"]:
-        records.append({
-            "type": "email",
-            "value": email,
-            "normalized": normalize_ioc("email", email),
-            "confidence": 50,
-            "context": "Extracted from sample strings",
-            "first_seen_in": first_seen_in,
-            "tags": ["contact"],
-        })
+    return sorted(findings, key=lambda f: f["id"])
 
-    return records
+
+# generate_ioc_records is replaced by make_ioc_records from the ioc module.
 
 
 def run_analysis(input_data: dict) -> dict:
@@ -481,9 +366,9 @@ def run_analysis(input_data: dict) -> dict:
     # Calculate average entropy
     avg_entropy = sum(e["entropy"] for e in entropies) / len(entropies) if entropies else 0
 
-    # Extract IOCs
+    # Extract IOCs (join strings into a single text blob for the library)
     logger.info("Extracting IOCs")
-    iocs = extract_iocs(strings)
+    iocs = extract_iocs("\n".join(strings))
 
     # Generate findings
     logger.info("Generating findings")
@@ -508,8 +393,10 @@ def run_analysis(input_data: dict) -> dict:
     elif score > 0:
         verdict = "benign"
 
-    # Generate IOC records
-    ioc_records = generate_ioc_records(iocs, sample_sha256)
+    # Generate, deduplicate, and sort IOC records
+    ioc_records = sort_ioc_records(
+        deduplicate_ioc_records(make_ioc_records(iocs, sample_sha256))
+    )
 
     # Compute config hash
     config_data = json.dumps({

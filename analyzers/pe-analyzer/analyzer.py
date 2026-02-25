@@ -11,6 +11,9 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+# scarabeo/evasion.py is copied into the container at build time as evasion.py
+from evasion import build_evasion_profile, evasion_profile_to_findings
+
 logging.basicConfig(
     level=logging.INFO,
     format='{"timestamp":"%(asctime)s","level":"%(levelname)s","message":"%(message)s"}',
@@ -584,10 +587,17 @@ def analyze_pe_bytes(data: bytes, sha256: str) -> dict:
     suspicious_imp    = detect_suspicious_imports(imports)
     ts_anomaly        = check_timestamp_anomaly(pe_header)
 
-    findings = generate_findings(
+    # Structural findings (PE-specific)
+    pe_findings = generate_findings(
         pe_header, sections, imports, packers,
         ts_anomaly, section_anomalies, suspicious_imp,
     )
+
+    # Evasion heuristics (import-based; strings analyzed by triage-universal)
+    evasion_profile  = build_evasion_profile(imports=imports, strings=[])
+    evasion_findings = evasion_profile_to_findings(evasion_profile, source="pe-analyzer")
+
+    findings = sorted(pe_findings + evasion_findings, key=lambda f: f["id"])
 
     # Artifacts — sha256 derived from artifact content where feasible
     imports_txt = "".join(
@@ -610,6 +620,8 @@ def analyze_pe_bytes(data: bytes, sha256: str) -> dict:
         "packers_detected": packers,
         "timestamp_anomaly": ts_anomaly,
         "imports":         imports,
+        "evasion_score":   evasion_profile.score,
+        "evasion_categories": sorted({i.category for i in evasion_profile.indicators}),
     }
     summary_sha256 = hashlib.sha256(
         json.dumps(pe_summary, sort_keys=True).encode()

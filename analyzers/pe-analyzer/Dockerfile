@@ -1,10 +1,17 @@
+# Build context must be the project root:
+#   docker build -t scarabeo/pe-analyzer:latest \
+#     -f analyzers/pe-analyzer/Dockerfile .
 FROM python:3.11-slim@sha256:1591aa8c01b5b37ab31dbe5662c5bdcf40c2f1bce4ef1c1fd24802dae3d01052
 
 WORKDIR /analyzer
 
 RUN pip install --no-cache-dir boto3==1.34.34
 
-COPY analyzer.py .
+# Copy shared libraries so the analyzer can import them locally
+COPY scarabeo/ioc.py ioc.py
+COPY scarabeo/evasion.py evasion.py
+
+COPY analyzers/pe-analyzer/analyzer.py .
 
 RUN mkdir -p /work/output/artifacts
 

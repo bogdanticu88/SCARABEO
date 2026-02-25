@@ -12,8 +12,12 @@ from pathlib import Path
 
 import pytest
 
-# Make the analyzer importable without Docker paths existing
-sys.path.insert(0, str(Path(__file__).parent.parent / "analyzers" / "pe-analyzer"))
+# The analyzer imports evasion.py and ioc.py, which are in scarabeo/ but get
+# copied into the container at build time.  For tests, put scarabeo/ on the
+# path first so those bare-name imports resolve correctly.
+_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(_ROOT / "scarabeo"))
+sys.path.insert(0, str(_ROOT / "analyzers" / "pe-analyzer"))
 import analyzer as pe  # noqa: E402
 
 
