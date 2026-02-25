@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 import enum
@@ -337,3 +337,52 @@ class ClusterMember(Base):
 
     def __repr__(self) -> str:
         return f"<ClusterMember cluster={self.cluster_id} sample={self.sample_sha256[:16]}...>"
+
+
+class SampleFingerprint(Base):
+    """
+    Per-sample fingerprint record for similarity matching.
+
+    Composite primary key (tenant_id, sha256) enforces one row per sample per
+    tenant and is the conflict target for idempotent upserts.  All hash columns
+    are nullable — not every file type yields every hash (e.g. imphash is
+    PE-only).
+    """
+
+    __tablename__ = "sample_fingerprints"
+
+    tenant_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Locality-sensitive hash (TLSH format, 72 chars with T1 prefix)
+    tlsh: Mapped[str | None] = mapped_column(String(72), nullable=True)
+    # Fuzzy hash (ssdeep format: "chunksize:hash:hash")
+    ssdeep: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # PE import hash (MD5 of normalised import table, 32 hex chars)
+    imphash: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # SHA256 of sorted printable strings extracted from the binary (64 hex chars)
+    strings_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Extensible metadata (file_type, size_bytes, analyzer versions, …)
+    extra: Mapped[dict | None] = mapped_column(
+        JSONB(astext_type=Text()),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index("ix_sample_fingerprints_imphash", "tenant_id", "imphash"),
+        Index("ix_sample_fingerprints_tlsh", "tenant_id", "tlsh"),
+        Index("ix_sample_fingerprints_created", "tenant_id", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SampleFingerprint sha256={self.sha256[:16]}... tenant={self.tenant_id}>"

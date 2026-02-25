@@ -101,6 +101,21 @@ class SubmitSampleResponse(BaseModel):
     estimated_time: int | None = None
 
 
+class SimilarSample(BaseModel):
+    """Single similarity match."""
+    sha256: str
+    algorithm: str
+    score: int
+
+
+class SimilarSamplesResponse(BaseModel):
+    """Response for similar-samples query."""
+    sha256: str
+    algorithm: str
+    matches: list[SimilarSample]
+    total: int
+
+
 class ErrorResponse(BaseModel):
     """Error response."""
     error: str
@@ -188,6 +203,7 @@ def create_app() -> FastAPI:
     app.get("/samples")(list_samples)
     app.get("/samples/{sha256}")(get_sample)
     app.get("/samples/{sha256}/report")(get_sample_report)
+    app.get("/samples/{sha256}/similar")(get_sample_similar)
 
     # Include review workflow router
     from services.api.review import router as review_router
@@ -477,6 +493,43 @@ def get_sample_report(
     except S3StorageError as e:
         logger.error(f"Failed to retrieve report: {e}")
         raise HTTPException(status_code=404, detail="Report not available") from e
+
+
+def get_sample_similar(
+    sha256: str,
+    auth: AuthContext = Depends(get_auth),
+    algorithm: str = Query(
+        default="tlsh",
+        pattern="^(tlsh|ssdeep|imphash)$",
+        description="Similarity algorithm: tlsh, ssdeep, or imphash",
+    ),
+    limit: int = Query(default=20, ge=1, le=100, description="Maximum matches to return"),
+    db: Session = Depends(get_db),
+) -> SimilarSamplesResponse:
+    """Find samples similar to the given sha256. Requires viewer role or higher."""
+    sample = get_sample_by_sha256(db=db, sha256=sha256, tenant_id=auth.tenant_id)
+    if not sample:
+        raise HTTPException(status_code=404, detail=f"Sample not found: {sha256}")
+
+    from scarabeo.fingerprint import find_similar
+
+    try:
+        matches = find_similar(
+            db,
+            sha256=sha256,
+            tenant_id=auth.tenant_id,
+            algorithm=algorithm,
+            limit=limit,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return SimilarSamplesResponse(
+        sha256=sha256,
+        algorithm=algorithm,
+        matches=[SimilarSample(**m) for m in matches],
+        total=len(matches),
+    )
 
 
 # Exception handlers
