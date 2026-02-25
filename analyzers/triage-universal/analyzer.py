@@ -19,6 +19,9 @@ from ioc import (
     sort_ioc_records,
 )
 
+# scarabeo/evasion.py is copied into the container at build time as evasion.py
+from evasion import build_evasion_profile, evasion_profile_to_findings
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -370,20 +373,31 @@ def run_analysis(input_data: dict) -> dict:
     logger.info("Extracting IOCs")
     iocs = extract_iocs("\n".join(strings))
 
-    # Generate findings
+    # Generate structural findings (entropy, IOCs, etc.)
     logger.info("Generating findings")
     findings = generate_findings(sample_data, iocs, entropies)
 
-    # Calculate verdict and score
+    # Evasion heuristics on extracted strings (works for any file type; most
+    # signals trigger only on Windows PE indicator strings)
+    logger.info("Running evasion heuristics")
+    evasion_profile  = build_evasion_profile(imports=[], strings=strings)
+    evasion_findings = evasion_profile_to_findings(evasion_profile, source="triage-universal")
+    if evasion_findings:
+        findings = sorted(findings + evasion_findings, key=lambda f: f["id"])
+
+    # Calculate verdict and score (evasion score feeds into verdict)
+    evasion_score = evasion_profile.score
     score = 0
     if any(f["severity"] == "CRITICAL" for f in findings):
         score = 95
     elif any(f["severity"] == "HIGH" for f in findings):
-        score = 75
+        score = max(75, evasion_score)
     elif any(f["severity"] == "MEDIUM" for f in findings):
-        score = 50
+        score = max(50, evasion_score)
     elif findings:
-        score = 25
+        score = max(25, evasion_score)
+    elif evasion_score > 0:
+        score = evasion_score
 
     verdict = "unknown"
     if score >= 75:
@@ -424,6 +438,8 @@ def run_analysis(input_data: dict) -> dict:
         "summary": {
             "verdict": verdict,
             "score": score,
+            "evasion_score": evasion_score,
+            "evasion_categories": sorted({i.category for i in evasion_profile.indicators}),
         },
         "findings": findings,
         "iocs": ioc_records,

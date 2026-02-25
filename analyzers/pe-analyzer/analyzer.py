@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import os
+import re
 import struct
 import sys
 from collections import Counter
@@ -117,6 +118,10 @@ PACKER_SECTION_NAMES: dict[str, str] = {
 
 HIGH_ENTROPY_THRESHOLD = 7.0
 
+# Maximum number of printable strings to extract (avoids multi-MB string lists)
+_MAX_EXTRACT_STRINGS = 5000
+_PRINTABLE_RE = re.compile(rb'[\x20-\x7e]{4,}')
+
 
 # ── Low-level helpers ────────────────────────────────────────────────────────
 
@@ -141,6 +146,19 @@ def rva_to_offset(rva: int, sections: list[dict]) -> int | None:
         if va <= rva < va + size:
             return rva - va + s["raw_offset"]
     return None
+
+
+def extract_strings_from_binary(data: bytes) -> list[str]:
+    """
+    Extract printable ASCII strings (min 4 chars) from raw bytes.
+
+    Returns at most _MAX_EXTRACT_STRINGS strings in file order.
+    These are fed to the evasion engine's string-pattern heuristics.
+    """
+    return [
+        m.group().decode("ascii", errors="replace")
+        for m in _PRINTABLE_RE.finditer(data)
+    ][:_MAX_EXTRACT_STRINGS]
 
 
 def read_cstring(data: bytes, offset: int, max_len: int = 256) -> str:
@@ -207,6 +225,12 @@ def parse_pe_header(data: bytes, dos_header: dict) -> dict | None:
     if len(data) >= subsystem_off + 2:
         subsystem = struct.unpack_from("<H", data, subsystem_off)[0]
 
+    # DllCharacteristics is at opt_off+70 for both PE32 and PE32+
+    dll_chars_off = opt_off + 70
+    dll_characteristics = 0
+    if len(data) >= dll_chars_off + 2:
+        dll_characteristics = struct.unpack_from("<H", data, dll_chars_off)[0]
+
     import_rva = 0
     if len(data) >= import_dir_off + 4:
         import_rva = struct.unpack_from("<I", data, import_dir_off)[0]
@@ -214,19 +238,20 @@ def parse_pe_header(data: bytes, dos_header: dict) -> dict | None:
     section_table_off = opt_off + opt_hdr_size
 
     return {
-        "machine":           MACHINE_TYPES.get(machine, f"unknown(0x{machine:x})"),
-        "machine_code":      machine,
-        "num_sections":      num_sections,
-        "timestamp":         timestamp,
-        "timestamp_iso":     datetime.utcfromtimestamp(timestamp).isoformat() if timestamp > 0 else None,
-        "characteristics":   characteristics,
-        "is_pe32_plus":      is_pe32_plus,
-        "image_base":        image_base,
-        "subsystem":         SUBSYSTEMS.get(subsystem, f"unknown({subsystem})"),
-        "subsystem_code":    subsystem,
-        "import_rva":        import_rva,
-        "section_table_off": section_table_off,
-        "coff_off":          coff_off,
+        "machine":             MACHINE_TYPES.get(machine, f"unknown(0x{machine:x})"),
+        "machine_code":        machine,
+        "num_sections":        num_sections,
+        "timestamp":           timestamp,
+        "timestamp_iso":       datetime.utcfromtimestamp(timestamp).isoformat() if timestamp > 0 else None,
+        "characteristics":     characteristics,
+        "dll_characteristics": dll_characteristics,
+        "is_pe32_plus":        is_pe32_plus,
+        "image_base":          image_base,
+        "subsystem":           SUBSYSTEMS.get(subsystem, f"unknown({subsystem})"),
+        "subsystem_code":      subsystem,
+        "import_rva":          import_rva,
+        "section_table_off":   section_table_off,
+        "coff_off":            coff_off,
     }
 
 
@@ -593,8 +618,24 @@ def analyze_pe_bytes(data: bytes, sha256: str) -> dict:
         ts_anomaly, section_anomalies, suspicious_imp,
     )
 
-    # Evasion heuristics (import-based; strings analyzed by triage-universal)
-    evasion_profile  = build_evasion_profile(imports=imports, strings=[])
+    # Extract printable strings for evasion string-pattern analysis
+    binary_strings = extract_strings_from_binary(data)
+
+    # Metadata dict for PE-header evasion signals
+    total_import_count = sum(len(imp.get("functions", [])) for imp in imports)
+    pe_meta = {
+        "dll_characteristics": pe_header.get("dll_characteristics", 0),
+        "sections":            sections,
+        "packers":             packers,
+        "timestamp_anomaly":   ts_anomaly,
+        "import_count":        total_import_count,
+        "subsystem_code":      pe_header.get("subsystem_code", 0),
+    }
+
+    # Full evasion analysis: imports + strings + PE header metadata
+    evasion_profile  = build_evasion_profile(
+        imports=imports, strings=binary_strings, metadata=pe_meta,
+    )
     evasion_findings = evasion_profile_to_findings(evasion_profile, source="pe-analyzer")
 
     findings = sorted(pe_findings + evasion_findings, key=lambda f: f["id"])
@@ -607,21 +648,23 @@ def analyze_pe_bytes(data: bytes, sha256: str) -> dict:
     imports_sha256 = hashlib.sha256(imports_txt.encode()).hexdigest()
 
     pe_summary = {
-        "file_type":       "pe",
-        "machine":         pe_header["machine"],
-        "is_pe32_plus":    pe_header["is_pe32_plus"],
-        "subsystem":       pe_header["subsystem"],
-        "subsystem_code":  pe_header["subsystem_code"],
-        "timestamp":       pe_header["timestamp"],
-        "timestamp_iso":   pe_header["timestamp_iso"],
-        "image_base":      hex(pe_header["image_base"]),
-        "num_sections":    pe_header["num_sections"],
-        "sections":        sections,
-        "packers_detected": packers,
-        "timestamp_anomaly": ts_anomaly,
-        "imports":         imports,
-        "evasion_score":   evasion_profile.score,
-        "evasion_categories": sorted({i.category for i in evasion_profile.indicators}),
+        "file_type":            "pe",
+        "machine":              pe_header["machine"],
+        "is_pe32_plus":         pe_header["is_pe32_plus"],
+        "subsystem":            pe_header["subsystem"],
+        "subsystem_code":       pe_header["subsystem_code"],
+        "dll_characteristics":  pe_header["dll_characteristics"],
+        "timestamp":            pe_header["timestamp"],
+        "timestamp_iso":        pe_header["timestamp_iso"],
+        "image_base":           hex(pe_header["image_base"]),
+        "num_sections":         pe_header["num_sections"],
+        "sections":             sections,
+        "packers_detected":     packers,
+        "timestamp_anomaly":    ts_anomaly,
+        "imports":              imports,
+        "evasion_score":        evasion_profile.score,
+        "evasion_score_breakdown": evasion_profile.score_breakdown,
+        "evasion_categories":   sorted({i.category for i in evasion_profile.indicators}),
     }
     summary_sha256 = hashlib.sha256(
         json.dumps(pe_summary, sort_keys=True).encode()

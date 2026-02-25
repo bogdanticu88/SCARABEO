@@ -7,8 +7,9 @@ WORKDIR /analyzer
 
 RUN pip install --no-cache-dir boto3==1.34.34
 
-# Copy the shared IOC library so the analyzer can import it as `ioc`
+# Copy shared libraries so the analyzer can import them locally
 COPY scarabeo/ioc.py ioc.py
+COPY scarabeo/evasion.py evasion.py
 
 COPY analyzers/triage-universal/analyzer.py .
 
