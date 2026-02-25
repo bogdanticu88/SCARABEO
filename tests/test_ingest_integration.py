@@ -33,8 +33,12 @@ def test_settings():
 @pytest.fixture(scope="module")
 def db_engine(test_settings):
     """Create test database engine."""
+    from sqlalchemy.exc import OperationalError
     engine = create_engine(test_settings.DATABASE_URL)
-    Base.metadata.create_all(engine)
+    try:
+        Base.metadata.create_all(engine)
+    except OperationalError:
+        pytest.skip("PostgreSQL not available")
     yield engine
     Base.metadata.drop_all(engine)
 
