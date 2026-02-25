@@ -45,11 +45,17 @@ class Settings(BaseSettings):
     ANALYZER_MAX_STRINGS: int = 10000
     ANALYZER_HIGH_ENTROPY_THRESHOLD: float = 7.5
 
-    # Ollama AI enrichment
+    # Ollama AI enrichment (narrative/remediation — free text)
     OLLAMA_ENABLED: bool = False
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "mistral:7b"
     OLLAMA_TIMEOUT: int = 120
+
+    # Structured finding explanation layer
+    EXPLAINER_ENABLED: bool = False
+    EXPLAINER_ENDPOINT: str = "http://localhost:11434"
+    EXPLAINER_MODEL: str = "mistral:7b"
+    EXPLAINER_TIMEOUT: int = 60
 
 
 @lru_cache
