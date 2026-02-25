@@ -8,13 +8,56 @@ from services.worker.merger import merge_partial_outputs, calculate_verdict
 class TestAnalyzerRouter:
     """Tests for analyzer routing."""
 
-    def test_triage_pipeline_pe(self):
-        """Triage pipeline runs only universal + similarity for PE."""
+    # ── triage pipeline ────────────────────────────────────────────────────
+
+    def test_triage_pipeline_pe_runs_pe_analyzer(self):
+        """Triage pipeline runs pe-analyzer for PE files (acceptance criterion)."""
         analyzers = get_analyzers_for_file_type("pe", "triage")
         names = [a["name"] for a in analyzers]
         assert "triage-universal" in names
+        assert "pe-analyzer" in names
         assert "similarity-analyzer" in names
+
+    def test_triage_pipeline_pe_excludes_elf_analyzer(self):
+        """PE triage does not run the ELF analyzer."""
+        names = [a["name"] for a in get_analyzers_for_file_type("pe", "triage")]
+        assert "elf-analyzer" not in names
+
+    def test_triage_pipeline_elf_runs_elf_analyzer(self):
+        names = [a["name"] for a in get_analyzers_for_file_type("elf", "triage")]
+        assert "elf-analyzer" in names
         assert "pe-analyzer" not in names
+
+    def test_triage_pipeline_script_runs_script_analyzer(self):
+        names = [a["name"] for a in get_analyzers_for_file_type("script", "triage")]
+        assert "script-analyzer" in names
+
+    def test_triage_pipeline_document_runs_doc_analyzer(self):
+        names = [a["name"] for a in get_analyzers_for_file_type("document", "triage")]
+        assert "doc-analyzer" in names
+
+    def test_triage_pipeline_archive_runs_archive_analyzer(self):
+        names = [a["name"] for a in get_analyzers_for_file_type("archive", "triage")]
+        assert "archive-analyzer" in names
+
+    def test_triage_pipeline_unknown_type(self):
+        """Unknown file type gets only always-run analyzers in triage."""
+        names = [a["name"] for a in get_analyzers_for_file_type("unknown", "triage")]
+        assert "triage-universal" in names
+        assert "similarity-analyzer" in names
+        # No file-type-specific analyzer for unknown
+        assert "pe-analyzer" not in names
+        assert "elf-analyzer" not in names
+
+    def test_triage_pipeline_excludes_optional_analyzers(self):
+        """Optional (feature-flagged) analyzers never appear in triage, even when flags are on."""
+        names = [a["name"] for a in get_analyzers_for_file_type(
+            "pe", "triage", feature_flags={"YARA_ENABLED": True, "CAPA_ENABLED": True}
+        )]
+        assert "yara-analyzer" not in names
+        assert "capa-analyzer" not in names
+
+    # ── deep pipeline ──────────────────────────────────────────────────────
 
     def test_deep_pipeline_pe(self):
         """Deep pipeline runs PE analyzer for PE files."""
@@ -33,19 +76,16 @@ class TestAnalyzerRouter:
         assert "pe-analyzer" not in names
 
     def test_deep_pipeline_script(self):
-        """Deep pipeline runs script analyzer for script files."""
         analyzers = get_analyzers_for_file_type("script", "deep")
         names = [a["name"] for a in analyzers]
         assert "script-analyzer" in names
 
     def test_deep_pipeline_document(self):
-        """Deep pipeline runs doc analyzer for document files."""
         analyzers = get_analyzers_for_file_type("document", "deep")
         names = [a["name"] for a in analyzers]
         assert "doc-analyzer" in names
 
     def test_deep_pipeline_archive(self):
-        """Deep pipeline runs archive analyzer for archive files."""
         analyzers = get_analyzers_for_file_type("archive", "deep")
         names = [a["name"] for a in analyzers]
         assert "archive-analyzer" in names
@@ -62,20 +102,79 @@ class TestAnalyzerRouter:
         names = [a["name"] for a in analyzers]
         assert "yara-analyzer" in names
 
+    def test_capa_enabled_with_flag(self):
+        analyzers = get_analyzers_for_file_type("pe", "deep", feature_flags={"CAPA_ENABLED": True})
+        names = [a["name"] for a in analyzers]
+        assert "capa-analyzer" in names
+
+    def test_deep_includes_optional_that_triage_skips(self):
+        """deep returns optional analyzers (when flagged) that triage omits."""
+        deep_names  = [a["name"] for a in get_analyzers_for_file_type(
+            "pe", "deep", feature_flags={"YARA_ENABLED": True}
+        )]
+        triage_names = [a["name"] for a in get_analyzers_for_file_type(
+            "pe", "triage", feature_flags={"YARA_ENABLED": True}
+        )]
+        assert "yara-analyzer" in deep_names
+        assert "yara-analyzer" not in triage_names
+
+    # ── archive pipeline ───────────────────────────────────────────────────
+
     def test_archive_pipeline(self):
-        """Archive pipeline runs correct analyzers."""
+        """Archive pipeline runs triage-universal, archive-analyzer, and similarity."""
         analyzers = get_analyzers_for_file_type("archive", "archive")
         names = [a["name"] for a in analyzers]
         assert "triage-universal" in names
         assert "archive-analyzer" in names
+        assert "similarity-analyzer" in names
+
+    def test_archive_pipeline_ignores_file_type(self):
+        """Archive pipeline runs regardless of detected file type."""
+        names_pe  = [a["name"] for a in get_analyzers_for_file_type("pe",  "archive")]
+        names_elf = [a["name"] for a in get_analyzers_for_file_type("elf", "archive")]
+        assert "archive-analyzer" in names_pe
+        assert "archive-analyzer" in names_elf
+        # File-type-specific analyzers are not added by the archive pipeline
+        assert "pe-analyzer"  not in names_pe
+        assert "elf-analyzer" not in names_elf
+
+    # ── unknown / default pipeline ─────────────────────────────────────────
+
+    def test_unknown_pipeline_name_behaves_like_triage(self):
+        """An unrecognised pipeline name falls back to mandatory routing."""
+        triage  = [a["name"] for a in get_analyzers_for_file_type("pe", "triage")]
+        unknown = [a["name"] for a in get_analyzers_for_file_type("pe", "totally-unknown")]
+        assert triage == unknown
+
+    def test_unknown_pipeline_pe_includes_pe_analyzer(self):
+        names = [a["name"] for a in get_analyzers_for_file_type("pe", "nonexistent")]
+        assert "pe-analyzer" in names
+
+    # ── general properties ─────────────────────────────────────────────────
+
+    def test_no_duplicate_analyzers_in_any_pipeline(self):
+        """No analyzer should appear twice in any pipeline output."""
+        for pipeline in ("triage", "deep", "archive"):
+            for ft in ("pe", "elf", "script", "document", "archive", "unknown"):
+                names = [a["name"] for a in get_analyzers_for_file_type(ft, pipeline)]
+                assert len(names) == len(set(names)), (
+                    f"Duplicates in pipeline={pipeline} file_type={ft}: {names}"
+                )
+
+    def test_triage_universal_always_present(self):
+        """triage-universal runs in every pipeline for every file type."""
+        for pipeline in ("triage", "deep", "archive"):
+            for ft in ("pe", "elf", "script", "document", "archive", "unknown"):
+                names = [a["name"] for a in get_analyzers_for_file_type(ft, pipeline)]
+                assert "triage-universal" in names, (
+                    f"triage-universal missing: pipeline={pipeline} file_type={ft}"
+                )
 
     def test_get_analyzer_container(self):
-        """Get container image for analyzer."""
         assert get_analyzer_container("pe-analyzer") == "scarabeo/pe-analyzer:latest"
         assert get_analyzer_container("unknown") is None
 
     def test_get_analyzer_version(self):
-        """Get version for analyzer."""
         assert get_analyzer_version("pe-analyzer") == "0.1.0"
         assert get_analyzer_version("unknown") == "unknown"
 

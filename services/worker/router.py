@@ -66,31 +66,70 @@ ANALYZERS = {
 }
 
 
-def get_analyzers_for_file_type(file_type: str, pipeline_name: str, feature_flags: dict[str, bool] | None = None) -> list[dict]:
+def _select_mandatory(file_type: str) -> list[dict]:
+    """
+    Return the mandatory (non-optional) analyzers for a given file type.
+
+    Includes all always-run analyzers and any analyzer whose condition
+    evaluates to True for the given file type.  Optional (feature-flagged)
+    analyzers are never included.
+    """
+    selected = []
+    for name, config in ANALYZERS.items():
+        if config.get("optional"):
+            continue
+        should_run = False
+        if config.get("always_run"):
+            should_run = True
+        elif config.get("condition"):
+            try:
+                should_run = config["condition"](file_type)
+            except Exception:
+                should_run = False
+        if should_run:
+            selected.append({"name": name, **config})
+    return selected
+
+
+def get_analyzers_for_file_type(
+    file_type: str,
+    pipeline_name: str,
+    feature_flags: dict[str, bool] | None = None,
+) -> list[dict]:
     """
     Get list of analyzers to run for a given file type and pipeline.
 
+    Pipeline semantics
+    ------------------
+    triage  — mandatory analyzers only (always-run + file-type conditional).
+              Optional / feature-flagged analyzers are excluded.
+              Example: PE file → triage-universal, pe-analyzer, similarity-analyzer.
+
+    deep    — all applicable analyzers, including optional ones when their
+              feature flag is enabled.
+
+    archive — triage-universal, archive-analyzer, and similarity-analyzer,
+              regardless of detected file type (archive pipeline is triggered
+              by the submission context, not the inner file type).
+
+    Any other pipeline_name falls back to the same logic as triage.
+
     Args:
-        file_type: Detected file type (pe, elf, script, document, archive, unknown)
+        file_type:     Detected file type (pe, elf, script, document, archive, unknown)
         pipeline_name: Pipeline name (triage, deep, archive)
-        feature_flags: Optional feature flags for optional analyzers
+        feature_flags: Optional dict of feature flag overrides
 
     Returns:
-        List of analyzer configurations to run
+        List of analyzer configuration dicts to run, in registration order.
     """
     feature_flags = feature_flags or {}
-    selected = []
 
-    # Pipeline-specific analyzer lists
     if pipeline_name == "triage":
-        # Triage only runs universal + similarity
-        for name, config in ANALYZERS.items():
-            if config.get("always_run") and name in ["triage-universal", "similarity-analyzer"]:
-                selected.append({"name": name, **config})
-        return selected
+        return _select_mandatory(file_type)
 
     elif pipeline_name == "deep":
-        # Deep runs all applicable analyzers
+        # Deep runs mandatory analyzers plus optional ones when their flag is on
+        selected = []
         for name, config in ANALYZERS.items():
             should_run = False
 
@@ -102,7 +141,7 @@ def get_analyzers_for_file_type(file_type: str, pipeline_name: str, feature_flag
                 except Exception:
                     should_run = False
 
-            # Check feature flags for optional analyzers
+            # Gate optional analyzers behind their feature flag
             if should_run and config.get("optional"):
                 flag = config.get("feature_flag")
                 if flag and not feature_flags.get(flag, False):
@@ -114,19 +153,17 @@ def get_analyzers_for_file_type(file_type: str, pipeline_name: str, feature_flag
         return selected
 
     elif pipeline_name == "archive":
-        # Archive runs triage + archive analyzer
+        # Archive pipeline is triggered by submission context, not inner file type
+        selected = []
         for name, config in ANALYZERS.items():
-            if name in ["triage-universal", "archive-analyzer"]:
+            if name in ("triage-universal", "archive-analyzer"):
                 selected.append({"name": name, **config})
             elif config.get("always_run") and name == "similarity-analyzer":
                 selected.append({"name": name, **config})
         return selected
 
-    # Default: run triage-universal and similarity
-    return [
-        {"name": "triage-universal", **ANALYZERS["triage-universal"]},
-        {"name": "similarity-analyzer", **ANALYZERS["similarity-analyzer"]},
-    ]
+    # Unknown pipeline names fall back to mandatory routing (same as triage)
+    return _select_mandatory(file_type)
 
 
 def get_analyzer_container(name: str) -> str | None:

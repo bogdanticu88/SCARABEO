@@ -80,26 +80,41 @@ The worker routes analyzers based on:
 
 ## Pipeline Recipes
 
-### triage.yaml
+### triage
 
-Basic static analysis for all file types:
-- triage-universal (strings, entropy, IOC extraction)
+Mandatory static analysis for every file type. Runs always-on analyzers plus
+the file-type-specific analyzer. Optional (feature-flagged) analyzers are
+excluded.
 
-### deep.yaml
+| file_type | Analyzers |
+|-----------|-----------|
+| `pe`       | triage-universal, pe-analyzer, similarity-analyzer |
+| `elf`      | triage-universal, elf-analyzer, similarity-analyzer |
+| `script`   | triage-universal, script-analyzer, similarity-analyzer |
+| `document` | triage-universal, doc-analyzer, similarity-analyzer |
+| `archive`  | triage-universal, archive-analyzer, similarity-analyzer |
+| `unknown`  | triage-universal, similarity-analyzer |
 
-Comprehensive analysis:
+### deep
+
+Comprehensive analysis. Same file-type routing as triage, plus optional
+analyzers when their feature flag is enabled.
+
 - triage-universal
-- File-type specific analyzer (pe/elf/script/doc)
+- File-type specific analyzer (pe / elf / script / doc / archive)
 - similarity-analyzer
-- yara-analyzer (optional, feature flag)
-- capa-analyzer (optional, feature flag)
+- yara-analyzer (optional — `YARA_ENABLED`)
+- capa-analyzer (optional — `CAPA_ENABLED`)
 
-### archive.yaml
+### archive
 
-Archive handling with recursion:
+Special pipeline for archive submissions. Runs a fixed set of analyzers
+regardless of detected inner file type; the archive-analyzer spawns child jobs
+for extracted members.
+
 - triage-universal
-- archive-analyzer
-- Spawns child jobs for extracted executables
+- archive-analyzer (may spawn child jobs)
+- similarity-analyzer
 
 ## Feature Flags
 
