@@ -1,4 +1,5 @@
-# SCARABEO
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/998b5b65-b734-4b49-8fbd-ecd741f57541" />
+# Scarabeo
 
 **Malware Analysis Framework**
 
@@ -290,4 +291,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 - Issues: GitHub Issues
 - Documentation: docs/ directory
 - Security: See docs/security.md
+
 
