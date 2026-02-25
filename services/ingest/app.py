@@ -116,6 +116,23 @@ class SimilarSamplesResponse(BaseModel):
     total: int
 
 
+class AIAnalysisResponse(BaseModel):
+    """AI-generated analysis response (summary or remediation)."""
+    sha256: str
+    narrative: str | None = None
+    remediation: str | None = None
+    generated_at: str | None = None
+    model: str | None = None
+    cached: bool
+
+
+class FindingExplanationResponse(BaseModel):
+    """AI explanation for a single finding."""
+    finding_id: str
+    explanation: str
+    model: str
+
+
 class ErrorResponse(BaseModel):
     """Error response."""
     error: str
@@ -204,6 +221,9 @@ def create_app() -> FastAPI:
     app.get("/samples/{sha256}")(get_sample)
     app.get("/samples/{sha256}/report")(get_sample_report)
     app.get("/samples/{sha256}/similar")(get_sample_similar)
+    app.get("/samples/{sha256}/ai/summary")(get_ai_summary)
+    app.post("/samples/{sha256}/ai/explain")(explain_finding_endpoint)
+    app.post("/samples/{sha256}/ai/remediation")(get_ai_remediation)
 
     # Include review workflow router
     from services.api.review import router as review_router
@@ -529,6 +549,154 @@ def get_sample_similar(
         algorithm=algorithm,
         matches=[SimilarSample(**m) for m in matches],
         total=len(matches),
+    )
+
+
+def _load_report_for_sample(sha256: str, auth: AuthContext, db) -> dict:
+    """Load report JSON from S3 for a given sample. Raises HTTPException on any failure."""
+    from services.ingest.storage import get_storage_client, S3StorageError
+
+    sample = get_sample_by_sha256(db=db, sha256=sha256, tenant_id=auth.tenant_id)
+    if not sample:
+        raise HTTPException(status_code=404, detail=f"Sample not found: {sha256}")
+
+    job = get_latest_job_for_sample(db, sample.id)
+    if not job or job.status != JobStatus.SUCCEEDED:
+        raise HTTPException(status_code=404, detail="Completed report not available")
+
+    storage = get_storage_client()
+    report_path = f"samples/{auth.tenant_id}/{sha256}/reports/{job.pipeline_hash}/report.json"
+    try:
+        if not storage.file_exists(report_path):
+            raise HTTPException(status_code=404, detail="Report file not found")
+        return storage.download_json(report_path)
+    except S3StorageError as e:
+        logger.error(f"Failed to load report for AI endpoint: {e}")
+        raise HTTPException(status_code=404, detail="Report not available") from e
+
+
+def _get_ollama_client():
+    """Return an OllamaClient based on ingest config settings."""
+    from scarabeo.llm import OllamaClient
+    return OllamaClient(settings.OLLAMA_URL, settings.OLLAMA_MODEL, settings.OLLAMA_TIMEOUT)
+
+
+def get_ai_summary(
+    sha256: str,
+    auth: AuthContext = Depends(get_auth),
+    db=Depends(get_db),
+) -> AIAnalysisResponse:
+    """
+    Return AI-generated narrative summary for a sample report.
+
+    Returns cached result if the report already contains ai_analysis,
+    otherwise generates fresh output from Ollama. Returns 503 if Ollama
+    is unreachable and no cached result exists.
+    """
+    report = _load_report_for_sample(sha256, auth, db)
+
+    cached = report.get("ai_analysis")
+    if cached:
+        return AIAnalysisResponse(
+            sha256=sha256,
+            narrative=cached.get("narrative"),
+            remediation=cached.get("remediation"),
+            generated_at=cached.get("generated_at"),
+            model=cached.get("model"),
+            cached=True,
+        )
+
+    client = _get_ollama_client()
+    if not client.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="AI service (Ollama) is not available. Submit the sample for re-analysis with OLLAMA_ENABLED=true, or start Ollama locally.",
+        )
+
+    from scarabeo.ai import enrich_report_with_ai
+    analysis = enrich_report_with_ai(report, client)
+    return AIAnalysisResponse(
+        sha256=sha256,
+        narrative=analysis["narrative"],
+        remediation=analysis["remediation"],
+        generated_at=analysis["generated_at"],
+        model=analysis["model"],
+        cached=False,
+    )
+
+
+def explain_finding_endpoint(
+    sha256: str,
+    body: dict,
+    auth: AuthContext = Depends(get_auth),
+    db=Depends(get_db),
+) -> FindingExplanationResponse:
+    """
+    Generate a plain-English explanation for a specific finding within a report.
+
+    Request body: {"finding_id": "<id>"}
+    Always generates fresh output — explanations are not cached.
+    """
+    finding_id = body.get("finding_id")
+    if not finding_id:
+        raise HTTPException(status_code=422, detail="finding_id is required")
+
+    report = _load_report_for_sample(sha256, auth, db)
+
+    finding = next((f for f in report.get("findings", []) if f.get("id") == finding_id), None)
+    if finding is None:
+        raise HTTPException(status_code=404, detail=f"Finding not found: {finding_id}")
+
+    client = _get_ollama_client()
+    if not client.is_available():
+        raise HTTPException(status_code=503, detail="AI service (Ollama) is not available")
+
+    from scarabeo.ai import explain_finding
+    explanation = explain_finding(finding, client)
+    return FindingExplanationResponse(
+        finding_id=finding_id,
+        explanation=explanation,
+        model=client.model,
+    )
+
+
+def get_ai_remediation(
+    sha256: str,
+    auth: AuthContext = Depends(get_auth),
+    db=Depends(get_db),
+) -> AIAnalysisResponse:
+    """
+    Return AI-generated remediation advice for a sample report.
+
+    Returns cached remediation if present in the stored report, otherwise
+    generates fresh output. Returns 503 if Ollama is unreachable and no
+    cached result exists.
+    """
+    report = _load_report_for_sample(sha256, auth, db)
+
+    cached = report.get("ai_analysis", {})
+    if cached.get("remediation"):
+        return AIAnalysisResponse(
+            sha256=sha256,
+            remediation=cached.get("remediation"),
+            generated_at=cached.get("generated_at"),
+            model=cached.get("model"),
+            cached=True,
+        )
+
+    client = _get_ollama_client()
+    if not client.is_available():
+        raise HTTPException(status_code=503, detail="AI service (Ollama) is not available")
+
+    from scarabeo.ai import suggest_remediation
+    from datetime import datetime, timezone
+    remediation = suggest_remediation(report, client)
+    return AIAnalysisResponse(
+        sha256=sha256,
+        remediation=remediation,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        model=client.model,
+        cached=False,
     )
 
 

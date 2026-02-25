@@ -45,7 +45,7 @@ class TestSearchQuery:
         result = parse_query("type:pe verdict:malicious tag:emotet")
         assert result.file_type == "pe"
         assert result.verdict == "malicious"
-        assert result.tag == "ransomware"
+        assert result.tag == "emotet"
 
     def test_parse_ioc_filter(self):
         """Test parsing IOC filter."""
@@ -88,8 +88,9 @@ class TestSearchIndexer:
         assert mock_db.add.called
         assert mock_db.commit.called
 
+    @patch('services.search.indexer.select')
     @patch('services.search.indexer.SearchIndex')
-    def test_get_sample(self):
+    def test_get_sample(self, mock_index, mock_select):
         """Test getting sample from index."""
         from services.search.indexer import SearchIndexer
 
@@ -124,14 +125,12 @@ class TestSearchIndexer:
 class TestSearchAPI:
     """Tests for search API endpoints."""
 
-    @patch('services.search.app.get_indexer')
-    @patch('services.search.app.authenticate_from_headers')
-    def test_search_endpoint(self, mock_auth, mock_get_indexer):
-        """Test search endpoint."""
+    def test_search_endpoint(self):
+        """Test search_samples function returns correct response structure."""
         from services.search.app import search_samples
         from scarabeo.auth import AuthContext, Role, AuthMode
 
-        mock_auth.return_value = AuthContext(
+        auth_ctx = AuthContext(
             tenant_id="test",
             user_id="user",
             role=Role.VIEWER,
@@ -145,10 +144,21 @@ class TestSearchAPI:
             [{"sample_sha256": "a" * 64, "file_type": "pe"}],
             1,
         )
-        mock_get_indexer.return_value = mock_indexer
 
-        # Would need proper FastAPI test client for full test
-        assert mock_auth.called
+        result = search_samples(
+            q="malware",
+            file_type=None,
+            verdict=None,
+            tag=None,
+            page=1,
+            per_page=20,
+            auth=auth_ctx,
+            indexer=mock_indexer,
+        )
+
+        assert result.total == 1
+        assert len(result.items) == 1
+        assert mock_indexer.search.called
 
 
 class TestCasesAPI:
@@ -202,8 +212,9 @@ class TestIOCIntelligence:
         assert mock_db.add.called
         assert mock_db.commit.called
 
+    @patch('scarabeo.intel.select')
     @patch('scarabeo.intel.IOCSighting')
-    def test_get_ioc_intel(self):
+    def test_get_ioc_intel(self, mock_sighting, mock_select):
         """Test getting IOC intelligence."""
         from scarabeo.intel import IOCIntelligence
 

@@ -26,9 +26,9 @@ class TestComputeHashesBytes:
         """Test hashing binary data."""
         data = bytes(range(256))
         hashes = compute_hashes_bytes(data)
-        assert hashes.md5 == "e1c1398204ba16a780f96f6409200857"
-        assert hashes.sha1 == "40322a385a27fdb86ea88cc072f25e87a209c6f9"
-        assert hashes.sha256 == "40aff2e9d2d8922e47afd4648e3828dd6ad7c04ec776af210c04292e8274300a"
+        assert hashes.md5 == "e2c865db4162bed963bfaa9ef6ac18f0"
+        assert hashes.sha1 == "4916d6bdb7f78e6803698cab32d1586ea457dfc8"
+        assert hashes.sha256 == "40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880"
 
 
 class TestComputeHashesStreaming:

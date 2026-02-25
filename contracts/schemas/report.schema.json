@@ -202,6 +202,17 @@
       "type": "object",
       "description": "Internal per-analyzer metadata, keyed by analyzer name",
       "additionalProperties": true
+    },
+    "ai_analysis": {
+      "type": "object",
+      "description": "AI-generated narrative and remediation advice",
+      "additionalProperties": false,
+      "properties": {
+        "narrative":    {"type": "string"},
+        "remediation":  {"type": "string"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "model":        {"type": "string"}
+      }
     }
   }
 }

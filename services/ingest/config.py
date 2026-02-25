@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     # Job queue
     JOB_QUEUE_NAME: str = "scarabeo:jobs:triage"
 
+    # Ollama AI enrichment
+    OLLAMA_ENABLED: bool = False
+    OLLAMA_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "mistral:7b"
+    OLLAMA_TIMEOUT: int = 120
+
     @property
     def max_upload_size_bytes(self) -> int:
         """Maximum upload size in bytes."""

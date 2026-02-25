@@ -366,6 +366,17 @@ def process_job(job_id: str) -> bool:
                 pipeline_hash=job.pipeline_hash,
             )
 
+            # Optional AI enrichment (fail-open: job succeeds even if Ollama is down)
+            if settings.OLLAMA_ENABLED:
+                try:
+                    from scarabeo.llm import OllamaClient
+                    from scarabeo.ai import enrich_report_with_ai
+                    client = OllamaClient(settings.OLLAMA_URL, settings.OLLAMA_MODEL, settings.OLLAMA_TIMEOUT)
+                    report_data["ai_analysis"] = enrich_report_with_ai(report_data, client)
+                    logger.info("AI enrichment completed")
+                except Exception as e:
+                    logger.warning(f"AI enrichment skipped: {e}")
+
             # Store report and artifacts
             store_report_and_artifacts(
                 db=db,
