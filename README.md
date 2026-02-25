@@ -7,7 +7,7 @@
 
 ## Overview
 
-SCARABEO is a production-grade, modular malware analysis framework designed for enterprise deployments. It provides:
+SCARABEO is a modular malware analysis framework for static analysis, automated detection, and structured reporting. Designed for security engineers and threat researchers, it supports scalable pipelines, analyzer plugins, and enterprise ready workflows.
 
 - **Multi-tenant architecture** with RBAC (viewer, analyst, admin)
 - **Static analysis** with 10+ specialized analyzers
@@ -290,3 +290,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 - Issues: GitHub Issues
 - Documentation: docs/ directory
 - Security: See docs/security.md
+
